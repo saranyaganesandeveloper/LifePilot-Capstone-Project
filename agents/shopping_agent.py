@@ -1,35 +1,60 @@
 # agents/shopping_agent.py
+
 from gen_client import generate
+import json
 import re
-from utils.validators import NON_VEG_WORDS
+
 
 class ShoppingAgent:
-    def run(self, meals: str, memory_context: list, prefs: dict):
+
+    def run(self, meal_text: str, prefs: dict):
         try:
             prompt = f"""
-Extract a categorized shopping list from this meal plan:
+You are a grocery list extraction assistant.
 
-Meal Plan:
-{meals}
+Convert the following MEAL PLAN into a structured JSON shopping list.
 
-USER PREFERENCES:
+Rules:
+- Output MUST be a JSON array ONLY.
+- No text before or after JSON.
+- No markdown.
+- Each item object MUST have:
+  - "category"
+  - "item"
+  - "quantity"
+  - "notes" (empty string "")
+
+Meal plan:
+{meal_text}
+
+User preferences (JSON-like):
 {prefs}
 
-RULES:
-- If diet_type = veg, exclude ALL non-veg items.
-- Avoid allergies & dislikes.
-- Shopping list ONLY.
+JSON array example:
+
+[
+  {{
+    "category": "Vegetables",
+    "item": "Tomato",
+    "quantity": "4",
+    "notes": ""
+  }},
+  {{
+    "category": "Grains",
+    "item": "Rice",
+    "quantity": "1 kg",
+    "notes": ""
+  }}
+]
 """
             raw = generate(prompt)
 
-            # HARD REMOVE any non-veg
-            for word in NON_VEG_WORDS:
-                raw = re.sub(word, "", raw, flags=re.IGNORECASE)
+            # Strip everything outside of the first [...] block
+            cleaned = re.sub(r"^[^\[]*", "", raw, flags=re.DOTALL)
+            cleaned = re.sub(r"[^\]]*$", "", cleaned, flags=re.DOTALL)
 
-            # Clean blank lines
-            raw = "\n".join([line for line in raw.split("\n") if line.strip()])
-
-            return raw
+            data = json.loads(cleaned)
+            return data
 
         except Exception as e:
-            return f"[ShoppingAgent Error] {str(e)}"
+            return [{"error": f"[ShoppingAgent Error] {str(e)}"}]

@@ -1,36 +1,30 @@
 # memory/vector_memory.py
 import numpy as np
-import faiss
 from gen_client import embed
-import traceback
 
 class VectorMemory:
-    def __init__(self):
-        try:
-            sample = embed("init")
-            self.dim = len(sample)
-        except:
-            self.dim = 768
 
-        self.index = faiss.IndexFlatL2(self.dim)
-        self.data = []
+    def __init__(self):
+        self.vectors = []
+        self.texts = []
 
     def add(self, text: str):
-        try:
-            vec = np.array([embed(text)], dtype="float32")
-            self.index.add(vec)
-            self.data.append(text)
-        except Exception:
-            print("[VectorMemory Error]", traceback.format_exc())
+        vec = np.array(embed(text), dtype="float32")
+        self.vectors.append(vec)
+        self.texts.append(text)
 
-    def search(self, query: str, k=3):
-        if not self.data:
+    def search(self, query: str, k=5):
+        if not self.vectors:
             return []
 
-        try:
-            qvec = np.array([embed(query)], dtype="float32")
-            scores, idx = self.index.search(qvec, k)
-            return [self.data[i] for i in idx[0] if i < len(self.data)]
-        except Exception:
-            print("[VectorMemory Search Error]", traceback.format_exc())
-            return []
+        qvec = np.array(embed(query), dtype="float32")
+
+        sims = []
+        for idx, v in enumerate(self.vectors):
+            denom = (np.linalg.norm(v) * np.linalg.norm(qvec)) + 1e-9
+            sims.append((np.dot(v, qvec) / denom, idx))
+
+        sims = sorted(sims, key=lambda x: x[0], reverse=True)
+        sims = sims[:k]
+
+        return [self.texts[i] for _, i in sims]

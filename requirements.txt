@@ -1,4 +1,14 @@
-google-genai
-faiss-cpu
-numpy
 streamlit
+google-genai==1.52.0
+numpy
+pandas
+faiss-cpu
+tenacity
+typing_extensions
+requests
+httpx
+pydantic
+anyio
+websockets
+google-auth
+python-dotenv

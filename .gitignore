@@ -1,0 +1,70 @@
+# -----------------------
+# Python
+# -----------------------
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pkl
+*.log
+
+# Virtual environments
+venv/
+env/
+.venv/
+.env/
+
+# Streamlit
+.streamlit/secrets.toml
+.streamlit/*.json
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Cache
+.cache/
+*.cache
+*.egg-info/
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# VS Code
+.vscode/
+
+# Backup / temp files
+*.tmp
+*.bak
+*.swp
+*.swo
+
+# FAISS or vector DB indexes
+*.index
+*.faiss
+*.bin
+
+# Credentials
+*.key
+*.env
+.env.local
+
+# Build
+dist/
+build/
+
+# Logs
+logs/
+*.log
+
+# PyInstaller
+*.spec
+
+# Testing
+.coverage
+htmlcov/
+pytest_cache/
+
+# Ignore all generated UI screenshots/images
+screenshots/
+images/

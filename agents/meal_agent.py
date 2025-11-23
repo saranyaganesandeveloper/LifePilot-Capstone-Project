@@ -1,31 +1,37 @@
 # agents/meal_agent.py
+
 from gen_client import generate
-from utils.validators import validate_meal_plan
+
 
 class MealPlannerAgent:
+
     def run(self, user_query: str, memory_context: list, prefs: dict):
         try:
             prompt = f"""
-You are a meal planning AI.
+You are a professional meal planner.
 
-USER PREFERENCES:
+Task:
+Generate a clean weekly meal plan ONLY.
+Do NOT include shopping lists.
+Do NOT include travel plans.
+
+User preferences (JSON-like):
 {prefs}
 
-MEMORY CONTEXT:
+Relevant memory:
 {memory_context}
 
-USER REQUEST:
+User request:
 {user_query}
 
-RULES:
-- Obey diet_type strictly (veg = NO meat, fish, eggs).
-- Respect cuisines, dislikes, allergies.
-- Clean 5-day meal plan only.
+Return ONLY the meal plan as text in a simple readable format, e.g.:
+
+Day 1: Breakfast - ...
+       Lunch - ...
+       Dinner - ...
+
+Day 2: ...
 """
-
-            raw = generate(prompt)
-            validated = validate_meal_plan(raw, prefs)
-            return validated
-
+            return generate(prompt)
         except Exception as e:
-            return f"[MealAgent Error] {str(e)}"
+            return f"[MealPlannerAgent Error] {str(e)}"

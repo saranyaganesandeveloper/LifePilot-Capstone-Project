@@ -1,64 +1,146 @@
 # orchestrator.py
+
+import time
 from agents.meal_agent import MealPlannerAgent
 from agents.shopping_agent import ShoppingAgent
 from agents.travel_agent import TravelAgent
 from memory.vector_memory import VectorMemory
 from memory.preference_extractor import extract_preferences
 
+
 class Orchestrator:
+
     def __init__(self):
-        self.meals = MealPlannerAgent()
-        self.shop = ShoppingAgent()
-        self.travel = TravelAgent()
+        self.meal_agent = MealPlannerAgent()
+        self.shopping_agent = ShoppingAgent()
+        self.travel_agent = TravelAgent()
         self.memory = VectorMemory()
 
-        # structured preference store
-        self.user_prefs = {
-            "cuisines": [],
-            "diet_type": "none",
-            "dislikes": [],
-            "allergies": [],
-            "spice_level": "none"
+    # -----------------------------
+    # Build dynamic preferences
+    # -----------------------------
+    def build_preferences(self):
+        """
+        Aggregate preferences from all memory entries using your
+        existing memory/preference_extractor.py.
+        """
+
+        prefs = {
+            "cuisines": set(),
+            "diet_type": None,
+            "dislikes": set(),
+            "allergies": set(),
+            "spice_level": None,
         }
 
-    def update_prefs(self, text: str):
-        prefs = extract_preferences(text)
-        # merge lists
-        self.user_prefs["cuisines"] = list(set(self.user_prefs["cuisines"] + prefs["cuisines"]))
-        self.user_prefs["dislikes"] = list(set(self.user_prefs["dislikes"] + prefs["dislikes"]))
-        self.user_prefs["allergies"] = list(set(self.user_prefs["allergies"] + prefs["allergies"]))
+        for entry in self.memory.texts:
+            p = extract_preferences(entry)
 
-        # override diet + spice_level only if detected
-        if prefs["diet_type"] != "none":
-            self.user_prefs["diet_type"] = prefs["diet_type"]
+            prefs["cuisines"].update(p.get("cuisines", []))
+            prefs["dislikes"].update(p.get("dislikes", []))
+            prefs["allergies"].update(p.get("allergies", []))
 
-        if prefs["spice_level"] != "none":
-            self.user_prefs["spice_level"] = prefs["spice_level"]
+            dt = p.get("diet_type")
+            if dt and dt != "none":
+                prefs["diet_type"] = dt
 
-    def handle(self, user_query: str):
-        q = user_query.lower().strip()
+            sl = p.get("spice_level")
+            if sl and sl != "none":
+                prefs["spice_level"] = sl
 
-        # save the message
+        prefs["cuisines"] = list(prefs["cuisines"])
+        prefs["dislikes"] = list(prefs["dislikes"])
+        prefs["allergies"] = list(prefs["allergies"])
+
+        return prefs
+
+    # -----------------------------
+    # Main entry used by UI
+    # -----------------------------
+    def handle(
+        self,
+        user_query: str,
+        run_meal: bool = True,
+        run_shopping: bool = True,
+        run_travel: bool = True,
+        return_logs: bool = False,
+    ):
+        results = {"meal": "", "shopping": [], "travel": ""}
+        logs = []
+
+        # Save query into memory
         self.memory.add(user_query)
-        
-        # update structured preferences
-        self.update_prefs(user_query)
 
-        # vector memory context
-        vector_context = self.memory.search(user_query)
+        # Vector memory for context
+        memory_context = self.memory.search(user_query, k=5)
+        # Dynamic prefs from all past messages
+        prefs = self.build_preferences()
 
-        try:
-            if "meal" in q and "shop" not in q:
-                return self.meals.run(user_query, vector_context, self.user_prefs)
+        # --------- MEAL PLAN ----------
+        meal_text = ""
+        if run_meal:
+            t0 = time.time()
+            meal_text = self.meal_agent.run(user_query, memory_context, prefs)
+            t1 = time.time()
 
-            elif "shop" in q or "shopping" in q:
-                plan = self.meals.run("weekly meal plan", vector_context, self.user_prefs)
-                return self.shop.run(plan, vector_context, self.user_prefs)
+            results["meal"] = meal_text
+            logs.append(
+                {
+                    "agent": "MealPlannerAgent",
+                    "prompt": user_query,
+                    "output": str(meal_text)[:500],
+                    "duration": f"{t1 - t0:.2f}s",
+                }
+            )
 
-            elif "travel" in q or "trip" in q:
-                return self.travel.run(user_query, vector_context, self.user_prefs)
+        # --------- SHOPPING LIST ----------
+        if run_shopping:
+            t0 = time.time()
 
-            return "I can help with meals, shopping lists, travel, and more."
+            # If user only selected Shopping (no meal),
+            # we still need a meal plan to base the list on.
+            if not meal_text:
+                # Fallback meal plan just for shopping generation
+                fallback_prompt = (
+                    f"Generate a simple 5–7 day meal plan based on "
+                    f"this user request and preferences.\n\n"
+                    f"Request: {user_query}\n\nPreferences: {prefs}"
+                )
+                meal_for_shopping = self.meal_agent.run(
+                    fallback_prompt, memory_context, prefs
+                )
+            else:
+                meal_for_shopping = meal_text
 
-        except Exception as e:
-            return f"[Orchestrator Error] {str(e)}"
+            shopping = self.shopping_agent.run(meal_for_shopping, prefs)
+            t1 = time.time()
+
+            results["shopping"] = shopping
+            logs.append(
+                {
+                    "agent": "ShoppingAgent",
+                    "prompt": meal_for_shopping[:500],
+                    "output": str(shopping)[:500],
+                    "duration": f"{t1 - t0:.2f}s",
+                }
+            )
+
+        # --------- TRAVEL ITINERARY ----------
+        if run_travel:
+            t0 = time.time()
+            travel_text = self.travel_agent.run(user_query, memory_context, prefs)
+            t1 = time.time()
+
+            results["travel"] = travel_text
+            logs.append(
+                {
+                    "agent": "TravelAgent",
+                    "prompt": user_query,
+                    "output": str(travel_text)[:500],
+                    "duration": f"{t1 - t0:.2f}s",
+                }
+            )
+
+        if return_logs:
+            return results, logs
+        return results
