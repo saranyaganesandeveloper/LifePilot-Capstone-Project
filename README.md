@@ -1,249 +1,159 @@
-# ✨ **LifePilot — Your AI-Powered Weekly Planner**
+✅ README.md (FINAL VERSION FOR YOUR PROJECT)
+# ✨ LifePilot — AI Powered Weekly Planner  
+Plan Meals • Shopping Lists • Travel Itineraries • Personalized with Memory
 
-*A Multi-Agent Personal Assistant for Meals, Shopping & Travel*
+LifePilot is an AI-powered assistant that plans your meals, shopping lists, and travel itineraries — all personalized using long-term user memory.
 
-LifePilot is an intelligent **multi-agent AI assistant** built with **Google GenAI**, **vector memory**, and a polished **Streamlit** interface.
-It automates three major weekly tasks for users:
-
-* 🍽 **Weekly Meal Planning**
-* 🛒 **Smart Grocery Shopping List Generation**
-* ✈ **Travel Itinerary Planning**
-
-Everything runs through one unified query — LifePilot handles routing, memory, and agent orchestration.
-
----
-
-## 🚀 **Features**
-
-### 🧠 Multi-Agent Architecture
-
-LifePilot uses three specialized agents:
-
-| Agent                | Responsibilities                                          |
-| -------------------- | --------------------------------------------------------- |
-| **MealPlannerAgent** | Generates weekly meal plans based on preferences & memory |
-| **ShoppingAgent**    | Extracts structured shopping lists from meal plans        |
-| **TravelAgent**      | Creates clean, emoji-styled itineraries (NO HTML)         |
+It uses:
+- Google Gemini AI (via `google-genai`)
+- Multi-agent architecture (Meal, Shopping, Travel)
+- Vector memory with automatic preference extraction
+- Streamlit UI with tabs, downloadable PDFs, and preference viewer
+- Docker-ready deployment
 
 ---
 
-### 🔍 Dynamic Preference Engine
+## 🚀 Features
 
-Every user input is analyzed:
+### 🔥 Intelligent Multi-Agent System
+LifePilot includes 3 specialized agents:
+- **Meal Planner Agent** — Creates meal plans based on memory + dietary preferences.
+- **Shopping Agent** — Generates a smart grocery list from meal plans.
+- **Travel Agent** — Builds itineraries grouped visually by *Morning / Afternoon / Evening*.
 
-* cuisine preferences
-* diet (veg / vegan / non-veg)
-* disliked ingredients
-* allergies
-* spice level
-
-Preferences accumulate over time using vector memory.
-
----
-
-### 🧠 Vector Memory (FAISS)
-
+### 🧠 Persistent Memory
 LifePilot remembers:
+- Food preferences (veg, vegan, non-veg)
+- Cuisines (South Indian, Italian, etc.)
+- Allergies & dislikes
+- Spice level
+- Implicit user patterns
 
-* past queries
-* food preferences
-* prior travel interests
-* dietary notes
-* implicit behaviour
+Preferences improve future outputs automatically.
 
-This helps agents generate more personalized results each time.
+### 🖥️ Streamlit UI
+- Tabs for **Meal Plan**, **Shopping List**, **Travel Itinerary**
+- **Raw JSON Logs** tab for debugging agent behavior
+- **Preferences Viewer**
+- **Download as PDF** button for each tab
 
----
+### 🧪 Built-in Test Cases
+Ready-to-run test scenarios to validate:
+- Memory retention  
+- Multi-agent orchestration  
+- Intent detection  
+- Combined requests  
 
-### 🧰 Google GenAI v1.52.0 (No deprecated configs!)
-
-LifePilot uses:
-
-* `models/gemini-2.0-flash-001` for fast generation
-* `models/text-embedding-004` for embeddings
-
-Fully compatible with **google-genai==1.52.0**.
-
----
-
-### 🖥 Streamlit UI
-
-The UI includes:
-
-* A global input bar
-* Selection panel (Meal / Shopping / Travel toggles)
-* Tabs for organized output
-* Plain-text emoji travel timeline
-* Real JSON logs returned from orchestrator
-* Fast, clean, responsive interface
+### 🐳 Docker Support
+Run LifePilot anywhere with a single command.
 
 ---
 
-## 📦 **Project Structure**
+# 📦 Project Structure
 
-```
+
+
 LifePilot/
-│── agents/
-│   ├── meal_agent.py
-│   ├── shopping_agent.py
-│   └── travel_agent.py
 │
-│── memory/
-│   ├── vector_memory.py
-│   └── preference_extractor.py
+├── ui/
+│ └── app.py # Streamlit UI
 │
-│── ui/
-│   └── app.py
+├── agents/
+│ ├── meal_agent.py
+│ ├── shopping_agent.py
+│ └── travel_agent.py
 │
-│── gen_client.py
-│── orchestrator.py
-│── intent.py
-│── requirements.txt
-│── README.md
-│── .gitignore
-```
+├── memory/
+│ ├── vector_memory.py
+│ ├── preference_extractor.py
+│ └── init.py
+│
+├── orchestrator.py # Central controller
+├── gen_client.py # Gemini API wrapper
+├── requirements.txt
+├── Dockerfile
+└── README.md
+
 
 ---
 
-## 🔧 **Installation**
+# 🔑 Environment Setup
 
-### 1. Clone the repo
-
+### 1️⃣ Clone the repo
 ```bash
-git clone https://github.com/yourusername/LifePilot.git
+git clone https://github.com/<yourname>/LifePilot.git
 cd LifePilot
-```
 
-### 2. Create virtual environment
-
-```bash
-python -m venv venv
-source venv/bin/activate    # Mac/Linux
-venv\Scripts\activate       # Windows
-```
-
-### 3. Install dependencies
-
-```bash
+2️⃣ Install dependencies
 pip install -r requirements.txt
-```
 
-### 4. Add your API key
+3️⃣ Create environment variable for Gemini
 
-Create `.env`:
+Create .env:
 
-```
-GEN_API_KEY=YOUR_KEY_HERE
-```
+GOOGLE_API_KEY=your_key_here
 
-Or export manually:
 
-```bash
-export GEN_API_KEY="your_key"
-```
+Or export directly:
 
----
+export GOOGLE_API_KEY="your_key_here"
 
-## ▶️ **Run LifePilot**
-
-```bash
+▶️ Running the App
 streamlit run ui/app.py
-```
-
----
-
-## 🧩 **How It Works**
-
-### 1️⃣ User writes any request:
-
-```
-Plan my next week. 
-Give me vegetarian meals, a shopping list, and a 2-day trip to Dallas.
-```
-
-### 2️⃣ Intent detector decides which agents to run:
-
-```
-meal: true  
-shopping: true  
-travel: true
-```
-
-### 3️⃣ MealAgent generates a clean weekly plan
-
-### 4️⃣ ShoppingAgent converts meal text → structured JSON
-
-### 5️⃣ TravelAgent returns plain-text grouped itinerary
-
-### 6️⃣ Orchestrator merges everything + logs
-
----
-
-## 📌 **Travel Itinerary Format (Guaranteed)**
-
-Always plain text:
-
-```
-🗓️ Day 1
-🌅 Morning
-Visit The Dallas World Aquarium.
-
-🌞 Afternoon
-Enjoy Klyde Warren Park.
-
-🌙 Evening
-Dinner in Deep Ellum.
 
 
-🗓️ Day 2
-🌅 Morning
-Perot Museum of Nature & Science.
+Open in browser:
 
-🌞 Afternoon
-Walk Bishop Arts District.
+http://localhost:8501
 
-🌙 Evening
-Sunset at Reunion Tower.
-```
+🧪 Test Cases for Validating the Entire Project
 
-No HTML, no CSS, no Markdown.
+These test cases help anyone confirm:
 
----
+Memory works
 
-## 🧪 **Sample Prompts**
+Intent detection works
 
-```
-Give me a vegetarian meal plan for 5 days.
-```
+Agents run correctly
 
-```
-Create a shopping list for these meals.
-```
+Combined requests work
 
-```
-Plan a romantic 2-day trip to Austin.
-```
+Edge cases behave as expected
 
-```
-I love South Indian food.
-```
+✅ Test Case 1 — Memory Retention
 
-LifePilot learns continuously.
+Step 1
 
----
+I love South Indian vegetarian food.
 
-## 📈 **Performance Notes**
 
-* Use `gemini-2.0-flash-001` for best speed
-* Agents run in parallel (async) for fast response
-* ShoppingAgent includes auto-meal fallback
-* Vector memory tracks preferences smartly
+Expected:
+No agents run. Preferences updated.
 
----
+Step 2
 
-## 🤝 **Contributing**
+Give me a 3-day meal plan.
 
-Pull requests are welcome!
 
----
+Expected:
+Meal plan is South Indian + vegetarian, based on stored memory.
 
+✅ Test Case 2 — Travel Only with Memory Context
+
+Step 1
+
+I prefer mild spice and I’m vegetarian.
+
+
+Step 2
+
+Plan a 2-day trip to Delhi.
+
+
+Expected:
+
+Only TravelAgent runs
+
+Output does NOT include meals
+
+Preferences should not affect travel itinerary
