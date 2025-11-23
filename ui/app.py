@@ -1,7 +1,16 @@
+# ui/app.py
+
+import io
 import streamlit as st
 import pandas as pd
 
 from orchestrator import Orchestrator
+
+# PDF generator
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph
+from reportlab.lib.styles import getSampleStyleSheet
+
 
 # ---------------------------------------------------------
 # PAGE CONFIG
@@ -12,12 +21,12 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("✨ LifePilot — Weekly Life Planner")
-st.write("Plan meals, shopping, and travel in one place with memory-aware AI.")
+st.title("✨ LifePilot — Weekly Planner")
+st.write("Plan meals, shopping, and travel using intelligent multi-agent AI.")
 
 
 # ---------------------------------------------------------
-# ORCHESTRATOR (PERSIST IN SESSION)
+# INITIALIZE ORCHESTRATOR IN SESSION
 # ---------------------------------------------------------
 if "orc" not in st.session_state:
     st.session_state["orc"] = Orchestrator()
@@ -26,27 +35,73 @@ orc: Orchestrator = st.session_state["orc"]
 
 
 # ---------------------------------------------------------
+# PDF GENERATORS
+# ---------------------------------------------------------
+def build_pdf(text: str) -> bytes:
+    """Create a PDF from plain text using ReportLab."""
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter)
+    styles = getSampleStyleSheet()
+
+    story = [Paragraph(text.replace("\n", "<br/>"), styles["Normal"])]
+    doc.build(story)
+
+    buffer.seek(0)
+    return buffer.read()
+
+
+def build_shopping_pdf(df: pd.DataFrame) -> bytes:
+    """Create a PDF from a shopping list DataFrame."""
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter)
+    styles = getSampleStyleSheet()
+
+    lines = []
+    for _, row in df.iterrows():
+        line = f"{row['category']}: {row['item']} — {row['quantity']} {row['notes']}".strip()
+        lines.append(line)
+
+    text = "<br/>".join(lines) if lines else "No items."
+    story = [Paragraph(text, styles["Normal"])]
+    doc.build(story)
+
+    buffer.seek(0)
+    return buffer.read()
+
+
+# ---------------------------------------------------------
 # AGENT SELECTION
 # ---------------------------------------------------------
-st.markdown("### ⚙️ What do you want LifePilot to generate?")
+st.markdown("### ⚙️ Choose what you want LifePilot to generate:")
 
-agent_options = st.multiselect(
-    "Select one or more:",
+agent_opts = st.multiselect(
+    "Select agents:",
     ["Meal Plan", "Shopping List", "Travel Itinerary"],
     default=["Meal Plan", "Shopping List", "Travel Itinerary"]
 )
 
-run_meal = "Meal Plan" in agent_options
-run_shopping = "Shopping List" in agent_options
-run_travel = "Travel Itinerary" in agent_options
+run_meal = "Meal Plan" in agent_opts
+run_shopping = "Shopping List" in agent_opts
+run_travel = "Travel Itinerary" in agent_opts
 
 
 # ---------------------------------------------------------
-# USER QUERY
+# VIEW CURRENT PREFERENCES (MEMORY)
+# ---------------------------------------------------------
+with st.expander("🔍 View Current Preferences (Memory Debug)"):
+    try:
+        prefs = orc.build_preferences()
+        st.json(prefs)
+    except Exception as e:
+        st.error(f"Failed to load preferences: {e}")
+
+
+# ---------------------------------------------------------
+# USER INPUT
 # ---------------------------------------------------------
 query = st.text_area(
     "💬 Ask LifePilot:",
-    placeholder="Example: Plan my next week with vegetarian meals, a shopping list, and a 2-day trip to Dallas."
+    placeholder="e.g., Plan my week with vegetarian meals, shopping list, and a Dallas trip."
 )
 
 
@@ -54,12 +109,13 @@ query = st.text_area(
 # RUN BUTTON
 # ---------------------------------------------------------
 if st.button("Run LifePilot 🚀"):
+
     if not query.strip():
         st.warning("Please enter a request.")
         st.stop()
 
-    # Call orchestrator
-    results, raw_logs = orc.handle(
+    # CALL ORCHESTRATOR
+    results, logs = orc.handle(
         query,
         run_meal=run_meal,
         run_shopping=run_shopping,
@@ -67,53 +123,99 @@ if st.button("Run LifePilot 🚀"):
         return_logs=True
     )
 
-    meal = results.get("meal", "")
-    shopping = results.get("shopping", [])
-    travel = results.get("travel", "")
+    # STORE RESULTS IN SESSION (PREVENT REFRESH CLEAR)
+    st.session_state["meal"] = results.get("meal")
+    st.session_state["shopping"] = results.get("shopping")
+    st.session_state["travel"] = results.get("travel")
+    st.session_state["logs"] = logs
 
-    # -----------------------------------------------------
-    # TABS: Meal | Shopping | Travel | Logs
-    # -----------------------------------------------------
+    # PRE-BUILD PDFS (SO DOWNLOAD DOES NOT TRIGGER RERUN)
+    st.session_state["meal_pdf"] = (
+        build_pdf(st.session_state["meal"]) if st.session_state["meal"] else None
+    )
+
+    if st.session_state.get("shopping"):
+        try:
+            df = pd.DataFrame(st.session_state["shopping"])
+            st.session_state["shopping_pdf"] = build_shopping_pdf(df)
+        except:
+            st.session_state["shopping_pdf"] = None
+    else:
+        st.session_state["shopping_pdf"] = None
+
+    st.session_state["travel_pdf"] = (
+        build_pdf(st.session_state["travel"]) if st.session_state["travel"] else None
+    )
+
+    st.session_state["ready"] = True
+
+
+# ---------------------------------------------------------
+# SHOW RESULTS IF READY
+# ---------------------------------------------------------
+if st.session_state.get("ready"):
+
     tabs = st.tabs(["🍽 Meal Plan", "🛒 Shopping List", "✈ Travel Itinerary", "📜 Logs"])
 
-    # MEAL TAB ------------------------------------------------
+    # ---------------------- MEAL TAB ----------------------
     with tabs[0]:
         st.subheader("🍽 Weekly Meal Plan")
-        if run_meal:
-            if meal:
-                st.markdown(f"```text\n{meal}\n```")
-            else:
-                st.info("No meal plan was generated.")
-        else:
-            st.info("Meal Plan agent is disabled. Enable it above to generate meals.")
 
-    # SHOPPING TAB -------------------------------------------
+        meal = st.session_state.get("meal")
+        if meal:
+            st.markdown(f"```text\n{meal}\n```")
+
+            if st.session_state.get("meal_pdf"):
+                st.download_button(
+                    "⬇️ Download Meal Plan as PDF",
+                    st.session_state["meal_pdf"],
+                    "meal_plan.pdf",
+                    "application/pdf"
+                )
+        else:
+            st.info("No meal plan generated.")
+
+    # ---------------------- SHOPPING TAB ----------------------
     with tabs[1]:
         st.subheader("🛒 Shopping List (max 30 items)")
-        if run_shopping:
-            if isinstance(shopping, list) and shopping:
-                try:
-                    df = pd.DataFrame(shopping)
-                    st.dataframe(df, use_container_width=True)
-                except Exception:
-                    st.write(shopping)
-            else:
-                st.info("No shopping list was generated.")
-        else:
-            st.info("Shopping List agent is disabled. Enable it above to generate a list.")
 
-    # TRAVEL TAB ---------------------------------------------
+        shopping = st.session_state.get("shopping")
+        if shopping:
+            try:
+                df = pd.DataFrame(shopping)
+                st.dataframe(df, width="stretch")
+            except:
+                st.write(shopping)
+
+            if st.session_state.get("shopping_pdf"):
+                st.download_button(
+                    "⬇️ Download Shopping List as PDF",
+                    st.session_state["shopping_pdf"],
+                    "shopping_list.pdf",
+                    "application/pdf"
+                )
+        else:
+            st.info("No shopping list generated.")
+
+    # ---------------------- TRAVEL TAB ----------------------
     with tabs[2]:
         st.subheader("✈ Travel Itinerary (Plain Text with Emojis)")
-        if run_travel:
-            if travel:
-                st.markdown(f"```text\n{travel}\n```")
-            else:
-                st.info("No travel itinerary was generated.")
-        else:
-            st.info("Travel Itinerary agent is disabled. Enable it above to generate a trip plan.")
 
-    # LOGS TAB -----------------------------------------------
+        travel = st.session_state.get("travel")
+        if travel:
+            st.markdown(f"```text\n{travel}\n```")
+
+            if st.session_state.get("travel_pdf"):
+                st.download_button(
+                    "⬇️ Download Travel Itinerary PDF",
+                    st.session_state["travel_pdf"],
+                    "travel_itinerary.pdf",
+                    "application/pdf"
+                )
+        else:
+            st.info("No travel itinerary generated.")
+
+    # ---------------------- LOGS TAB ----------------------
     with tabs[3]:
         st.subheader("📜 Raw JSON Logs")
-        st.json(raw_logs)
+        st.json(st.session_state.get("logs"))

@@ -1,14 +1,23 @@
-streamlit
+# --- Core Framework ---
+streamlit==1.36.0
+
+# --- Google AI SDK ---
 google-genai==1.52.0
-numpy
-pandas
-faiss-cpu
-tenacity
-typing_extensions
-requests
-httpx
-pydantic
-anyio
-websockets
-google-auth
-python-dotenv
+google-auth==2.29.0
+
+# --- Data Handling ---
+pandas==2.2.2
+numpy==1.26.4
+
+# --- PDF Generation ---
+reportlab==4.1.0
+
+# --- HTTP / Utilities ---
+requests==2.31.0
+tenacity==8.2.3
+
+# --- Pydantic (required by google-genai) ---
+pydantic==2.7.1
+
+# --- Optional: if you use vector search later ---
+# faiss-cpu==1.7.4
