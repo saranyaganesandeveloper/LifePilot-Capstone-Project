@@ -6,6 +6,10 @@ import re
 
 
 class ShoppingAgent:
+    """
+    Converts a meal plan text into a structured JSON shopping list.
+    The orchestrator will cap the list to a maximum of 30 items.
+    """
 
     def run(self, meal_text: str, prefs: dict):
         try:
@@ -16,13 +20,13 @@ Convert the following MEAL PLAN into a structured JSON shopping list.
 
 Rules:
 - Output MUST be a JSON array ONLY.
-- No text before or after JSON.
-- No markdown.
+- No explanatory text before or after JSON.
+- No markdown formatting.
 - Each item object MUST have:
-  - "category"
-  - "item"
-  - "quantity"
-  - "notes" (empty string "")
+  - "category" (e.g., Vegetables, Fruits, Grains, Dairy, Spices, Staples, etc.)
+  - "item" (product name)
+  - "quantity" (e.g., '1 kg', '2 packs', '6 pieces')
+  - "notes" (string, may be left "")
 
 Meal plan:
 {meal_text}
@@ -30,7 +34,8 @@ Meal plan:
 User preferences (JSON-like):
 {prefs}
 
-JSON array example:
+Return ONLY the JSON array.
+Example:
 
 [
   {{
@@ -49,7 +54,7 @@ JSON array example:
 """
             raw = generate(prompt)
 
-            # Strip everything outside of the first [...] block
+            # Extract just the JSON array from the response
             cleaned = re.sub(r"^[^\[]*", "", raw, flags=re.DOTALL)
             cleaned = re.sub(r"[^\]]*$", "", cleaned, flags=re.DOTALL)
 

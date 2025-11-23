@@ -20,11 +20,6 @@ class Orchestrator:
     # Build dynamic preferences
     # -----------------------------
     def build_preferences(self):
-        """
-        Aggregate preferences from all memory entries using your
-        existing memory/preference_extractor.py.
-        """
-
         prefs = {
             "cuisines": set(),
             "diet_type": None,
@@ -55,28 +50,19 @@ class Orchestrator:
         return prefs
 
     # -----------------------------
-    # Main entry used by UI
+    # Handle Query
     # -----------------------------
-    def handle(
-        self,
-        user_query: str,
-        run_meal: bool = True,
-        run_shopping: bool = True,
-        run_travel: bool = True,
-        return_logs: bool = False,
-    ):
-        results = {"meal": "", "shopping": [], "travel": ""}
+    def handle(self, user_query, run_meal=True, run_shopping=True, run_travel=True, return_logs=False):
+
         logs = []
+        results = {"meal": "", "shopping": [], "travel": ""}
 
-        # Save query into memory
+        # Add memory first
         self.memory.add(user_query)
-
-        # Vector memory for context
         memory_context = self.memory.search(user_query, k=5)
-        # Dynamic prefs from all past messages
         prefs = self.build_preferences()
 
-        # --------- MEAL PLAN ----------
+        # ---- MEAL ----
         meal_text = ""
         if run_meal:
             t0 = time.time()
@@ -84,63 +70,35 @@ class Orchestrator:
             t1 = time.time()
 
             results["meal"] = meal_text
-            logs.append(
-                {
-                    "agent": "MealPlannerAgent",
-                    "prompt": user_query,
-                    "output": str(meal_text)[:500],
-                    "duration": f"{t1 - t0:.2f}s",
-                }
-            )
+            logs.append({"agent": "MealPlannerAgent", "output": meal_text, "duration": f"{t1-t0:.2f}s"})
 
-        # --------- SHOPPING LIST ----------
+        # ---- SHOPPING ----
         if run_shopping:
             t0 = time.time()
 
-            # If user only selected Shopping (no meal),
-            # we still need a meal plan to base the list on.
             if not meal_text:
-                # Fallback meal plan just for shopping generation
-                fallback_prompt = (
-                    f"Generate a simple 5–7 day meal plan based on "
-                    f"this user request and preferences.\n\n"
-                    f"Request: {user_query}\n\nPreferences: {prefs}"
-                )
-                meal_for_shopping = self.meal_agent.run(
-                    fallback_prompt, memory_context, prefs
-                )
-            else:
-                meal_for_shopping = meal_text
+                fallback_prompt = f"Generate a vegetarian weekly meal plan based on preferences: {prefs}"
+                meal_text = self.meal_agent.run(fallback_prompt, memory_context, prefs)
 
-            shopping = self.shopping_agent.run(meal_for_shopping, prefs)
+            shopping = self.shopping_agent.run(meal_text, prefs)
+
+            # LIMIT TO 30 ITEMS
+            shopping = shopping[:30]
+
             t1 = time.time()
-
             results["shopping"] = shopping
-            logs.append(
-                {
-                    "agent": "ShoppingAgent",
-                    "prompt": meal_for_shopping[:500],
-                    "output": str(shopping)[:500],
-                    "duration": f"{t1 - t0:.2f}s",
-                }
-            )
+            logs.append({"agent": "ShoppingAgent", "output": shopping[:5], "duration": f"{t1-t0:.2f}s"})
 
-        # --------- TRAVEL ITINERARY ----------
+        # ---- TRAVEL ----
         if run_travel:
             t0 = time.time()
-            travel_text = self.travel_agent.run(user_query, memory_context, prefs)
+            travel = self.travel_agent.run(user_query, memory_context, prefs)
             t1 = time.time()
 
-            results["travel"] = travel_text
-            logs.append(
-                {
-                    "agent": "TravelAgent",
-                    "prompt": user_query,
-                    "output": str(travel_text)[:500],
-                    "duration": f"{t1 - t0:.2f}s",
-                }
-            )
+            results["travel"] = travel
+            logs.append({"agent": "TravelAgent", "output": travel, "duration": f"{t1-t0:.2f}s"})
 
         if return_logs:
             return results, logs
+
         return results

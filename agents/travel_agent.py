@@ -5,8 +5,12 @@ import re
 
 
 class TravelAgent:
+    """
+    Generates a 2-day travel itinerary as plain text grouped by day and time of day,
+    with emojis, and strictly no HTML or markdown formatting.
+    """
 
-    def run(self, user_query: str, memory_context: list, prefs: dict):
+    def run(self, user_query: str, memory_context: list, prefs: dict) -> str:
         prompt = f"""
 You are a travel itinerary planner.
 
@@ -15,7 +19,7 @@ Return a 2-day itinerary in PLAIN TEXT grouped format with emojis.
 STRICT RULES:
 - NO HTML
 - NO CSS
-- NO <div>, <span>, <br>, style attributes
+- NO <div>, <span>, <br>, or style attributes
 - NO markdown formatting (#, **, *, ``` )
 - MUST use emojis:
     🗓️ for each Day
@@ -52,7 +56,7 @@ User request:
 User preferences (JSON-like):
 {prefs}
 
-Memory context:
+Relevant memory context:
 {memory_context}
 
 Return ONLY plain text grouped with emojis in this format. Nothing else.
@@ -60,14 +64,14 @@ Return ONLY plain text grouped with emojis in this format. Nothing else.
         try:
             raw = generate(prompt)
 
-            # Remove any stray HTML if the model tries to be fancy
+            # Remove any stray HTML if model misbehaves
             cleaned = re.sub(r"<[^>]+>", "", raw)
             cleaned = re.sub(r"<!--.*?-->", "", cleaned, flags=re.DOTALL)
 
             # Remove markdown artifacts
             cleaned = re.sub(r"[#*_`>-]", "", cleaned)
 
-            # Normalize excessive blank lines
+            # Normalize extra blank lines
             cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
 
             return cleaned.strip()
