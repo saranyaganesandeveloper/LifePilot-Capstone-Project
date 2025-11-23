@@ -68,3 +68,5 @@ pytest_cache/
 # Ignore all generated UI screenshots/images
 screenshots/
 images/
+
+notebook/*
