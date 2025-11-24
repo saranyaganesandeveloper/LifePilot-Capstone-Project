@@ -63,7 +63,10 @@ LifePilot-Capstone-Project/
 ```
 
 ---
+### 📁 **Architecture Diagram**
+![Architecture Diagram](docs/architecture.png)
 
+---
 ## 🔧 Local Setup
 
 ### 1️⃣ Create a Virtual Environment
