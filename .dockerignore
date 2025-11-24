@@ -1,0 +1,89 @@
+# -------------------------------
+# Python & Virtual Environment
+# -------------------------------
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pdb
+*.egg-info/
+*.egg
+venv/
+.env/
+.venv/
+env/
+ENV/
+
+# -------------------------------
+# IDE / Editor Files
+# -------------------------------
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# -------------------------------
+# Streamlit Cache & Logs
+# -------------------------------
+.streamlit/
+logs/
+cache/
+**/.streamlit/
+**/logs/
+**/cache/
+
+# -------------------------------
+# Build Artifacts & Temp Files
+# -------------------------------
+build/
+dist/
+*.spec
+*.log
+tmp/
+temp/
+*.tmp
+
+# -------------------------------
+# OS Specific
+# -------------------------------
+ehthumbs.db
+Icon?
+*.lnk
+
+# -------------------------------
+# PDF / Output Files
+# -------------------------------
+*.pdf
+*.png
+*.jpg
+*.jpeg
+
+# -------------------------------
+# Test Data (if any)
+# -------------------------------
+tests/
+test/
+*.test
+
+# -------------------------------
+# Node-related (if UI ever added)
+# -------------------------------
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# -------------------------------
+# Local environment keys
+# -------------------------------
+GEN_API_KEY*
+*.key
+*.pem
+*.crt
+
+# -------------------------------
+# Git
+# -------------------------------
+.git/
+.gitignore

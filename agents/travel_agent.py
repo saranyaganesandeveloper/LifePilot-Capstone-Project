@@ -1,80 +1,86 @@
 # agents/travel_agent.py
 
-from gen_client import generate
 import re
+from typing import Any, Dict, List
+from gen_client import generate
 
 
 class TravelAgent:
     """
-    Generates a 2-day travel itinerary as plain text grouped by day and time of day,
-    with emojis, and strictly no HTML or markdown formatting.
+    Builds a multi-day travel itinerary in plain text.
     """
 
-    def run(self, user_query: str, memory_context: list, prefs: dict) -> str:
+    def infer_days(self, query: str) -> int:
+        q = (query or "").lower()
+
+        m = re.search(r"(\d+)\s*day", q)
+        if m:
+            try:
+                return max(1, int(m.group(1)))
+            except ValueError:
+                pass
+
+        if "weekend" in q:
+            return 2
+
+        if "3 days" in q or "3-day" in q:
+            return 3
+
+        # Default if not specified
+        return 2
+
+    def run(
+        self,
+        query: str,
+        memory_context: List[str],
+        prefs: Dict[str, Any]
+    ) -> str:
+        num_days = self.infer_days(query)
+
+        cuisines = ", ".join(prefs.get("cuisines", [])) or "Not specified"
+        diet = prefs.get("diet_type") or "Not specified"
+        allergies = ", ".join(prefs.get("allergies", [])) or "None"
+        travel_style = prefs.get("travel_style") or "Not specified"
+
+        context_snippets = "\n".join(memory_context or [])
+
         prompt = f"""
-You are a travel itinerary planner.
+You are a friendly but precise travel planner.
 
-Return a 2-day itinerary in PLAIN TEXT grouped format with emojis.
+User Query:
+{query}
 
-STRICT RULES:
-- NO HTML
-- NO CSS
-- NO <div>, <span>, <br>, or style attributes
-- NO markdown formatting (#, **, *, ``` )
-- MUST use emojis:
-    🗓️ for each Day
-    🌅 for Morning
-    🌞 for Afternoon
-    🌙 for Evening
+User historical context:
+{context_snippets}
 
-FORMAT EXACTLY LIKE:
+User food preferences (if relevant to restaurants):
+- Cuisines: {cuisines}
+- Diet type: {diet}
+- Allergies: {allergies}
 
-🗓️ Day 1
-🌅 Morning
-<plan>
+User travel style (if any): {travel_style}
 
-🌞 Afternoon
-<plan>
+Plan EXACTLY {num_days} days.
 
-🌙 Evening
-<plan>
+For each day, include:
+- 🌅 Morning:
+- 🌞 Afternoon:
+- 🌙 Evening:
 
+Rules:
+- Plain text only.
+- No HTML, no <div>, no JSON, no bullet lists.
+- Exactly this structure:
 
-🗓️ Day 2
-🌅 Morning
-<plan>
+Day 1
+🌅 Morning: ...
+🌞 Afternoon: ...
+🌙 Evening: ...
 
-🌞 Afternoon
-<plan>
+Day 2
+...
 
-🌙 Evening
-<plan>
-
-User request:
-{user_query}
-
-User preferences (JSON-like):
-{prefs}
-
-Relevant memory context:
-{memory_context}
-
-Return ONLY plain text grouped with emojis in this format. Nothing else.
+Keep it realistic and family-friendly.
 """
-        try:
-            raw = generate(prompt)
 
-            # Remove any stray HTML if model misbehaves
-            cleaned = re.sub(r"<[^>]+>", "", raw)
-            cleaned = re.sub(r"<!--.*?-->", "", cleaned, flags=re.DOTALL)
-
-            # Remove markdown artifacts
-            cleaned = re.sub(r"[#*_`>-]", "", cleaned)
-
-            # Normalize extra blank lines
-            cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
-
-            return cleaned.strip()
-
-        except Exception as e:
-            return f"[TravelAgent Error] {str(e)}"
+        return generate(prompt).strip()

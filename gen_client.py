@@ -1,9 +1,18 @@
 # gen_client.py
 
 import os
+from typing import List
+
 from google.genai import Client
 
 API_KEY = os.getenv("GEN_API_KEY")
+
+if not API_KEY:
+    # Fail fast so user notices env issue instead of silent failures
+    raise RuntimeError(
+        "GEN_API_KEY environment variable is not set. "
+        "Export it before running LifePilot."
+    )
 
 client = Client(api_key=API_KEY)
 
@@ -12,22 +21,21 @@ EMBED_MODEL = "models/text-embedding-004"
 
 
 # ---------------------------------------------------------
-# TEXT GENERATION  (google-genai v1.52.0)
+# TEXT GENERATION (google-genai v1.52.0)
 # ---------------------------------------------------------
 def generate(prompt: str) -> str:
     try:
-        # NO generation_config allowed
         resp = client.models.generate_content(
             model=GEN_MODEL,
-            contents=prompt
+            contents=prompt,
         )
 
-        # Standard output path
+        # Standard output
         if hasattr(resp, "text") and resp.text:
             return resp.text
 
         # Candidate fallback (rare)
-        if hasattr(resp, "candidates") and resp.candidates:
+        if getattr(resp, "candidates", None):
             parts = resp.candidates[0].content.parts
             if parts and hasattr(parts[0], "text"):
                 return parts[0].text
@@ -39,18 +47,17 @@ def generate(prompt: str) -> str:
 
 
 # ---------------------------------------------------------
-# EMBEDDINGS  (google-genai v1.52.0)
+# EMBEDDINGS (google-genai v1.52.0)
 # ---------------------------------------------------------
-def embed(text: str):
+def embed(text: str) -> List[float]:
     try:
         resp = client.models.embed_content(
             model=EMBED_MODEL,
-            contents=text     # correct for your SDK
+            contents=text,
         )
 
-        # New API format:
-        if hasattr(resp, "embeddings"):
-            return resp.embeddings[0].values
+        if hasattr(resp, "embeddings") and resp.embeddings:
+            return list(resp.embeddings[0].values)
 
         return [0.0] * 768
 

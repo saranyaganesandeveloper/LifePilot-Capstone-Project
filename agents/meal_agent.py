@@ -1,53 +1,98 @@
 # agents/meal_agent.py
 
+import re
+from typing import Any, Dict, List
 from gen_client import generate
 
 
 class MealPlannerAgent:
     """
-    Generates a weekly meal plan using:
-    - current user query
-    - vector memory context
-    - dynamic preferences (cuisines, diet_type, spice_level, etc.)
+    Generates a meal plan in plain text form,
+    with number of days inferred from the query.
     """
 
-    def run(self, user_query: str, memory_context: list, prefs: dict) -> str:
-        try:
-            prompt = f"""
-You are a professional meal planner.
+    def infer_days(self, query: str) -> int:
+        q = (query or "").lower()
 
-Task:
-Generate a clear weekly meal plan ONLY.
-Do NOT include shopping lists.
-Do NOT include travel content.
+        # Very short / single meal
+        if "tonight" in q or "for tonight" in q:
+            return 1
+        if "today" in q and ("dinner" in q or "lunch" in q or "breakfast" in q):
+            return 1
 
-User preferences (JSON-like):
-{prefs}
+        # Look for "3 days", "4 day", etc.
+        m = re.search(r"(\d+)\s*[- ]?\s*days?", q)
+        if m:
+            try:
+                return max(1, int(m.group(1)))
+            except ValueError:
+                pass
 
-Relevant past context:
-{memory_context}
+        # Weekend
+        if "weekend" in q:
+            return 2
 
-User request:
-{user_query}
+        # Weekly wording
+        if "week" in q or "weekly" in q:
+            return 7
 
-Guidelines:
-- Respect diet_type (veg / non-veg / vegan) if present.
-- Respect cuisines and dislikes.
-- Use a 5–7 day structure.
-- For each day, suggest Breakfast, Lunch, and Dinner.
+        # Default
+        return 5
 
-Return ONLY the meal plan as plain text, for example:
+    def run(
+        self,
+        query: str,
+        memory_context: List[str],
+        prefs: Dict[str, Any]
+    ) -> str:
+        num_days = self.infer_days(query)
 
-Day 1:
-  Breakfast - ...
-  Lunch - ...
-  Dinner - ...
+        cuisines = ", ".join(prefs.get("cuisines", [])) or "Not specified"
+        diet = prefs.get("diet_type") or "Not specified"
+        dislikes = ", ".join(prefs.get("dislikes", [])) or "None"
+        allergies = ", ".join(prefs.get("allergies", [])) or "None"
+        spice = prefs.get("spice_level") or "Not specified"
 
-Day 2:
-  Breakfast - ...
-  Lunch - ...
-  Dinner - ...
+        context_snippets = "\n".join(memory_context or [])
+
+        if num_days == 1:
+            days_instructions = (
+                "The user only needs a single meal (for tonight or one meal).\n"
+                "Return just a short, clear description for that meal "
+                "(e.g., 'Tonight: ...').\n"
+            )
+        else:
+            days_instructions = (
+                f"Return a {num_days}-day meal plan with clear 'Day 1', 'Day 2', etc.\n"
+            )
+
+        prompt = f"""
+You are an expert meal planner assistant.
+
+User Query:
+{query}
+
+User historical context:
+{context_snippets}
+
+User preferences (from memory):
+- Cuisines: {cuisines}
+- Diet type: {diet}
+- Dislikes: {dislikes}
+- Allergies or intolerances: {allergies}
+- Preferred spice level: {spice}
+
+Very important:
+- If the user is vegetarian or mentions veg, DO NOT include meat or fish.
+- If user is lactose intolerant or dairy is in allergies, avoid milk, yogurt, cheese,
+  cream, paneer, butter, ghee, and any milk-based products.
+- Respect dislikes and allergies strictly.
+
+{days_instructions}
+Format:
+- Plain text only.
+- No JSON, no code fences.
+- You may label meals as Breakfast / Lunch / Dinner if helpful.
 """
-            return generate(prompt)
-        except Exception as e:
-            return f"[MealPlannerAgent Error] {str(e)}"
+
+        return generate(prompt).strip()

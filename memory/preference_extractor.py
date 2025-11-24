@@ -1,15 +1,24 @@
 # memory/preference_extractor.py
-from gen_client import generate
+
 import json
 import re
+from typing import Dict, Any
 
-def extract_preferences(text: str) -> dict:
+from gen_client import generate
+
+
+def extract_preferences(text: str) -> Dict[str, Any]:
+    """
+    Ask the model to summarize user preferences from free text.
+    Returns a stable dict, even if parsing fails.
+    """
     prompt = f"""
 You are a system that extracts structured user preferences.
 
 Extract food + travel preferences from this text:
 
-"{text}"
+\"\"\"{text}\"\"\"
+
 
 Return STRICT JSON ONLY with this structure:
 
@@ -27,13 +36,24 @@ Return STRICT JSON ONLY with this structure:
     raw = generate(prompt)
 
     try:
-        # Strip everything before/after JSON
+        # Try to strip everything before first '{' and after last '}'
         cleaned = re.sub(r"^[^{]*", "", raw)
         cleaned = re.sub(r"[^}]*$", "", cleaned)
 
-        return json.loads(cleaned)
+        data = json.loads(cleaned)
 
-    except:
+        # Fill defaults if keys missing
+        return {
+            "cuisines": data.get("cuisines", []) or [],
+            "diet_type": data.get("diet_type", "") or "",
+            "dislikes": data.get("dislikes", []) or [],
+            "allergies": data.get("allergies", []) or [],
+            "spice_level": data.get("spice_level", "") or "",
+            "travel_style": data.get("travel_style", "") or "",
+            "likes": data.get("likes", []) or [],
+        }
+
+    except Exception:
         return {
             "cuisines": [],
             "diet_type": "",
@@ -41,5 +61,5 @@ Return STRICT JSON ONLY with this structure:
             "allergies": [],
             "spice_level": "",
             "travel_style": "",
-            "likes": []
+            "likes": [],
         }

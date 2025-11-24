@@ -1,23 +1,26 @@
 # --- Core Framework ---
-streamlit==1.36.0
+streamlit==1.39.0
 
 # --- Google AI SDK ---
 google-genai==1.52.0
-google-auth==2.29.0
+google-auth>=2.29.0
+requests>=2.32.0
 
 # --- Data Handling ---
-pandas==2.2.2
-numpy==1.26.4
+pandas>=2.2.2
+numpy>=1.26.4
+scikit-learn>=1.3.0
 
 # --- PDF Generation ---
-reportlab==4.1.0
+reportlab>=4.1.0
 
-# --- HTTP / Utilities ---
-requests==2.31.0
-tenacity==8.2.3
+# --- Retry / Utilities ---
+tenacity>=8.2.3
+rich>=13.5.2
+ujson>=5.9.0
+aiohttp>=3.8.1
+watchdog>=4.0.0
+protobuf>=5.27.0
 
-# --- Pydantic (required by google-genai) ---
-pydantic==2.7.1
-
-# --- Optional: if you use vector search later ---
-# faiss-cpu==1.7.4
+# --- Pydantic required by google-genai ---
+pydantic>=2.9,<3.0

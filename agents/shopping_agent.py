@@ -1,65 +1,85 @@
 # agents/shopping_agent.py
 
-from gen_client import generate
 import json
-import re
+import ast
+from typing import Any, Dict, List, Union
+
+from gen_client import generate
 
 
 class ShoppingAgent:
     """
-    Converts a meal plan text into a structured JSON shopping list.
-    The orchestrator will cap the list to a maximum of 30 items.
+    Takes a meal plan text and produces a structured shopping list
+    as a list of dicts: [{category, item, quantity, notes}, ...]
     """
 
-    def run(self, meal_text: str, prefs: dict):
-        try:
-            prompt = f"""
-You are a grocery list extraction assistant.
+    def _extract_json_array(self, raw: str) -> str:
+        """
+        Try to extract the first top-level JSON array substring from the raw text.
+        """
+        raw = raw.strip()
+        start = raw.find("[")
+        end = raw.rfind("]")
+        if start != -1 and end != -1 and end > start:
+            return raw[start:end + 1]
+        return raw
 
-Convert the following MEAL PLAN into a structured JSON shopping list.
+    def run(
+        self,
+        meal_plan_text: str,
+        prefs: Dict[str, Any]
+    ) -> Union[List[Dict[str, Any]], str]:
+        """
+        Given a meal plan in plain text, return a minimal shopping list
+        as a Python list of dicts or a raw string fallback.
+        """
 
-Rules:
-- Output MUST be a JSON array ONLY.
-- No explanatory text before or after JSON.
-- No markdown formatting.
-- Each item object MUST have:
-  - "category" (e.g., Vegetables, Fruits, Grains, Dairy, Spices, Staples, etc.)
-  - "item" (product name)
-  - "quantity" (e.g., '1 kg', '2 packs', '6 pieces')
-  - "notes" (string, may be left "")
+        prompt = f"""
+You are a grocery list generator.
+
+Given the following meal plan, create a MINIMAL shopping list
+(covering required ingredients) with AT MOST 30 items.
 
 Meal plan:
-{meal_text}
+\"\"\"{meal_plan_text}\"\"\"
 
-User preferences (JSON-like):
-{prefs}
 
-Return ONLY the JSON array.
-Example:
+User preferences (may affect ingredients):
+{json.dumps(prefs, indent=2)}
 
-[
-  {{
-    "category": "Vegetables",
-    "item": "Tomato",
-    "quantity": "4",
-    "notes": ""
-  }},
-  {{
-    "category": "Grains",
-    "item": "Rice",
-    "quantity": "1 kg",
-    "notes": ""
-  }}
-]
+Rules:
+- Group items logically into categories (e.g., "Vegetables", "Fruits",
+  "Grains & Pulses", "Dairy Alternatives", "Spices", "Staples").
+- If the user is lactose intolerant, prefer dairy-free alternatives (e.g. plant milk).
+- Return STRICT JSON ONLY.
+- DO NOT wrap in backticks.
+- Structure: a JSON array of objects, each with keys:
+  - "category": string
+  - "item": string
+  - "quantity": string
+  - "notes": string
 """
-            raw = generate(prompt)
 
-            # Extract just the JSON array from the response
-            cleaned = re.sub(r"^[^\[]*", "", raw, flags=re.DOTALL)
-            cleaned = re.sub(r"[^\]]*$", "", cleaned, flags=re.DOTALL)
+        raw = generate(prompt).strip()
 
-            data = json.loads(cleaned)
-            return data
+        # Try strict JSON first
+        candidate = self._extract_json_array(raw)
 
-        except Exception as e:
-            return [{"error": f"[ShoppingAgent Error] {str(e)}"}]
+        for attempt in (candidate, candidate.replace("'", '"')):
+            try:
+                data = json.loads(attempt)
+                if isinstance(data, list):
+                    return data
+            except Exception:
+                pass
+
+        # Try Python literal (in case model forgot JSON)
+        try:
+            data = ast.literal_eval(candidate)
+            if isinstance(data, list):
+                return data
+        except Exception:
+            pass
+
+        # Final fallback: return raw string so UI can still display something
+        return raw
