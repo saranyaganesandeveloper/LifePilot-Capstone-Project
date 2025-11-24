@@ -6,45 +6,28 @@ from gen_client import generate
 
 
 class MealPlannerAgent:
-    """
-    Generates a meal plan in plain text form,
-    with number of days inferred from the query.
-    """
 
     def infer_days(self, query: str) -> int:
         q = (query or "").lower()
 
-        # Very short / single meal
-        if "tonight" in q or "for tonight" in q:
-            return 1
-        if "today" in q and ("dinner" in q or "lunch" in q or "breakfast" in q):
+        if "tonight" in q:
             return 1
 
-        # Look for "3 days", "4 day", etc.
         m = re.search(r"(\d+)\s*[- ]?\s*days?", q)
         if m:
             try:
-                return max(1, int(m.group(1)))
-            except ValueError:
+                return int(m.group(1))
+            except:
                 pass
 
-        # Weekend
         if "weekend" in q:
             return 2
-
-        # Weekly wording
         if "week" in q or "weekly" in q:
             return 7
 
-        # Default
         return 5
 
-    def run(
-        self,
-        query: str,
-        memory_context: List[str],
-        prefs: Dict[str, Any]
-    ) -> str:
+    def run(self, query: str, memory_context: List[str], prefs: Dict[str, Any]) -> str:
         num_days = self.infer_days(query)
 
         cuisines = ", ".join(prefs.get("cuisines", [])) or "Not specified"
@@ -56,43 +39,39 @@ class MealPlannerAgent:
         context_snippets = "\n".join(memory_context or [])
 
         if num_days == 1:
-            days_instructions = (
-                "The user only needs a single meal (for tonight or one meal).\n"
-                "Return just a short, clear description for that meal "
-                "(e.g., 'Tonight: ...').\n"
+            day_info = (
+                "Return a short, single vegetarian meal description.\n"
+                "Format: 'Tonight: ...'\n"
             )
         else:
-            days_instructions = (
-                f"Return a {num_days}-day meal plan with clear 'Day 1', 'Day 2', etc.\n"
-            )
+            day_info = f"Return a {num_days}-day vegetarian meal plan with Day 1, Day 2, etc."
 
         prompt = f"""
-You are an expert meal planner assistant.
+You are an expert vegetarian meal planner.
 
 User Query:
 {query}
 
-User historical context:
+Historical context:
 {context_snippets}
 
-User preferences (from memory):
+User Preferences:
 - Cuisines: {cuisines}
 - Diet type: {diet}
 - Dislikes: {dislikes}
-- Allergies or intolerances: {allergies}
-- Preferred spice level: {spice}
+- Allergies: {allergies}
+- Spice preference: {spice}
 
-Very important:
-- If the user is vegetarian or mentions veg, DO NOT include meat or fish.
-- If user is lactose intolerant or dairy is in allergies, avoid milk, yogurt, cheese,
-  cream, paneer, butter, ghee, and any milk-based products.
-- Respect dislikes and allergies strictly.
+Important:
+- Vegetarian only.
+- Avoid dairy if lactose intolerant.
+- No meat, egg, fish, shellfish, poultry.
+- Respect dislikes and allergies.
 
-{days_instructions}
+{day_info}
+
 Format:
-- Plain text only.
-- No JSON, no code fences.
-- You may label meals as Breakfast / Lunch / Dinner if helpful.
+Plain text only. No JSON. No code fences.
 """
 
         return generate(prompt).strip()

@@ -69,4 +69,4 @@ pytest_cache/
 screenshots/
 images/
 
-notebook/*
+notebook

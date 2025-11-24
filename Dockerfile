@@ -1,35 +1,44 @@
-# -------------------------------------------------------
-# LifePilot — Dockerfile
-# Python + Streamlit + Google GenAI + ReportLab support
-# -------------------------------------------------------
+# ------------------------------
+# Stage 1 — Builder
+# ------------------------------
+FROM python:3.11-slim AS builder
 
-FROM python:3.10-slim
+ENV PYTHONUNBUFFERED=1
+ENV GEN_API_KEY=$GEN_API_KEY
 
-# Install system dependencies for reportlab (PDF fonts)
-RUN apt-get update && apt-get install -y \
-    libfreetype6-dev \
-    libjpeg62-turbo-dev \
-    libpng-dev \
+WORKDIR /build
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    gcc \
+    git \
     && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+
+# ------------------------------
+# Stage 2 — Runtime
+# ------------------------------
+FROM python:3.11-slim
+
+ENV PYTHONUNBUFFERED=1
+ENV PATH=/usr/local/bin:$PATH
+
+# Add PYTHONPATH so orchestrator.py & agents/ can be imported
+ENV PYTHONPATH="/app:${PYTHONPATH:-}"
+
+RUN useradd --create-home --shell /bin/bash appuser
 
 WORKDIR /app
 
-# Copy project files
+COPY --from=builder /usr/local /usr/local
 COPY . /app
 
-# Install Python dependencies
-RUN pip install --upgrade pip
-RUN pip install -r requirements.txt
+ENV PORT=8080
+EXPOSE 8080
 
-# Expose Streamlit port
-EXPOSE 8501
+USER appuser
 
-# Environment variable for Google AI Key
-ENV GOOGLE_API_KEY=""
-
-# Streamlit runs without Stdin prompts
-ENV STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
-
-# Run the Streamlit app
-CMD ["streamlit", "run", "ui/app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+CMD ["sh", "-c", "streamlit run ui/app.py --server.port=${PORT:-8080} --server.address=0.0.0.0"]

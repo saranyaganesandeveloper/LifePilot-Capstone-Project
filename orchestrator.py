@@ -14,11 +14,11 @@ from utils.validators import validate_meal_plan
 
 class Orchestrator:
     """
-    Main coordinator for LifePilot.
-    - Stores user queries in vector memory.
-    - Extracts preferences over time.
-    - Auto-detects which agents to call (meal / shopping / travel).
-    - Returns a clean dict that the UI can consume.
+    Main coordinator for LifePilot:
+    • Stores user queries in memory
+    • Extracts preferences
+    • Performs deterministic intent detection
+    • Runs meal / shopping / travel agents
     """
 
     def __init__(self) -> None:
@@ -27,43 +27,63 @@ class Orchestrator:
         self.travel_agent = TravelAgent()
         self.memory = VectorMemory()
 
-    # ---------------- Intent detection ----------------
+    # ---------------------------------------------------------
+    # DETERMINISTIC INTENT DETECTION (NO LLM)
+    # ---------------------------------------------------------
     def detect_intent(self, text: str) -> Dict[str, bool]:
         """
-        Very simple keyword-based intent detection.
+        Pure rule-based intent detection so behavior is consistent
+        across all requests and does not depend on LLM randomness.
         """
-        t = (text or "").lower()
 
-        meal_words = [
-            "meal", "diet", "breakfast", "lunch", "dinner",
-            "menu", "food plan", "meal plan", "weekly meals",
-            "snacks", "cooking plan"
-        ]
-        shopping_words = [
-            "shopping", "grocery", "groceries", "shopping list",
-            "buy ingredients", "ingredients list", "market list"
-        ]
-        travel_words = [
-            "travel", "trip", "itinerary", "vacation", "tour",
-            "road trip", "day trip", "visit", "2 days", "3 days",
-            "4 days", "5 days", "weekend", "holiday"
-        ]
+        if not text:
+            return {"meal": False, "shopping": False, "travel": False}
 
-        has_meal = any(w in t for w in meal_words)
-        has_shopping = any(w in t for w in shopping_words)
-        has_travel = any(w in t for w in travel_words)
+        q = text.lower()
 
-        return {
-            "meal": has_meal,
-            "shopping": has_shopping,
-            "travel": has_travel,
-        }
+        # --- feature flags ---
+        has_trip_words = any(w in q for w in [
+            "trip", "travel", "itinerary", "vacation", "visit", "tour",
+            "day trip", "weekend in", "weekend trip"
+        ])
 
-    # ---------------- Preferences from memory ----------------
+        has_restaurant_words = any(w in q for w in [
+            "restaurant", "restaurants", "cafe", "eatery", "diner", "food spots"
+        ])
+
+        # Meal intent only when user is clearly asking for planning meals / recipes
+        has_explicit_meal_words = any(w in q for w in [
+            "meal plan", "plan my meals", "plan meals", "weekly meals",
+            "diet plan", "menu", "breakfast", "lunch", "dinner", "snacks",
+            "recipes", "cook for", "cooking plan"
+        ])
+
+        has_food_plan_combo = (
+            "plan" in q and any(w in q for w in ["meals", "meal", "food", "diet"])
+        )
+
+        has_shopping_words = any(w in q for w in [
+            "shopping list", "grocery list", "groceries", "grocery",
+            "buy ingredients", "market list", "shopping for food"
+        ])
+
+        # --- final booleans ---
+        travel = has_trip_words or has_restaurant_words
+        meal = has_explicit_meal_words or has_food_plan_combo
+        shopping = has_shopping_words
+
+        # IMPORTANT: restaurants alone → travel only, not meal
+        if has_restaurant_words and not has_explicit_meal_words and not has_shopping_words:
+            meal = False
+            shopping = False
+            travel = True
+
+        return {"meal": meal, "shopping": shopping, "travel": travel}
+
+    # ---------------------------------------------------------
+    # EXTRACT USER PREFERENCES FROM MEMORY
+    # ---------------------------------------------------------
     def build_preferences(self) -> Dict[str, Any]:
-        """
-        Aggregate user food preferences from memory.texts using preference_extractor.
-        """
         prefs = {
             "cuisines": set(),
             "diet_type": None,
@@ -74,7 +94,6 @@ class Orchestrator:
             "likes": set(),
         }
 
-        # VectorMemory is assumed to store raw texts in self.texts
         for txt in getattr(self.memory, "texts", []):
             p = extract_preferences(txt)
 
@@ -84,149 +103,122 @@ class Orchestrator:
             prefs["likes"].update(p.get("likes", []))
 
             dt = p.get("diet_type")
-            if dt and dt.lower() != "none":
+            if dt:
                 prefs["diet_type"] = dt
 
             sl = p.get("spice_level")
-            if sl and sl.lower() != "none":
+            if sl:
                 prefs["spice_level"] = sl
 
             ts = p.get("travel_style")
-            if ts and ts.lower() != "none":
+            if ts:
                 prefs["travel_style"] = ts
 
-        # Convert sets to lists for JSON safety
-        prefs["cuisines"] = list(prefs["cuisines"])
-        prefs["dislikes"] = list(prefs["dislikes"])
-        prefs["allergies"] = list(prefs["allergies"])
-        prefs["likes"] = list(prefs["likes"])
+        # Convert sets → lists
+        for k in ["cuisines", "dislikes", "allergies", "likes"]:
+            prefs[k] = list(prefs[k])
 
         return prefs
 
-    # ---------------- Main entry point ----------------
+    # ---------------------------------------------------------
+    # MAIN HANDLE() METHOD
+    # ---------------------------------------------------------
     def handle(
         self,
         user_query: str,
         return_logs: bool = False
     ) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
-        """
-        Auto-detects which agents to run. No UI agent selection.
-        Returns:
-            results = {
-                "meal": str,
-                "shopping": list | str,
-                "travel": str
-            }
-            logs = list of debug dicts (if return_logs=True)
-        """
+
         logs: List[Dict[str, Any]] = []
         results: Dict[str, Any] = {"meal": "", "shopping": [], "travel": ""}
 
         if not user_query:
-            if return_logs:
-                return results, logs
-            return results, []
+            return (results, logs) if return_logs else (results, [])
 
-        # Always store the query in memory
+        # Store query in memory
         self.memory.add(user_query)
 
-        # Build preference summary
         prefs = self.build_preferences()
 
-        # Try to get some similar past context (optional)
+        # Retrieve similar past memory
         try:
             memory_context = self.memory.search(user_query, k=5)
         except Exception:
             memory_context = []
 
-        # Detect intent
+        # ------------------ INTENT DETECTION ------------------
         intents = self.detect_intent(user_query)
         want_meal = intents["meal"]
         want_shopping = intents["shopping"]
         want_travel = intents["travel"]
 
-        # If user is just expressing preferences (no explicit request)
+        # If nothing asked
         if not (want_meal or want_shopping or want_travel):
-            msg = "Only memory updated; no agents triggered."
             logs.append({
                 "agent": "Orchestrator",
                 "prompt": user_query,
-                "output": msg,
+                "output": "No actionable intent detected.",
                 "duration": "0.00s",
             })
-            if return_logs:
-                return results, logs
-            return results, []
+            return (results, logs) if return_logs else (results, [])
 
         meal_text = ""
 
-        # -------- MEAL PLAN --------
+        # ------------------ MEAL PLAN ------------------
         if want_meal:
             t0 = time.time()
             meal_text = self.meal_agent.run(user_query, memory_context, prefs)
-            # Enforce vegetarian if needed
             meal_text = validate_meal_plan(meal_text, prefs)
             t1 = time.time()
-
             results["meal"] = meal_text
+
             logs.append({
                 "agent": "MealPlannerAgent",
                 "prompt": user_query,
-                "output": str(meal_text)[:900],
+                "output": meal_text[:900],
                 "duration": f"{t1 - t0:.2f}s",
             })
 
-        # -------- SHOPPING LIST --------
+        # ------------------ SHOPPING LIST ------------------
         if want_shopping:
             t0 = time.time()
-
-            # If user asked ONLY shopping, generate a minimal internal meal basis
+            # If no meal text yet, create a tiny internal meal description
             if not meal_text:
                 fallback_prompt = (
-                    "Generate a simple, short meal description from this request "
-                    "and preferences. This is only used internally to build "
-                    "a shopping list.\n\n"
-                    f"Request: {user_query}\n\n"
+                    "Create a VERY short internal vegetarian meal description for "
+                    "2–3 meals, used only to build a grocery list from the user request:\n\n"
+                    f"{user_query}\n\n"
                     f"Preferences: {json.dumps(prefs, indent=2)}"
                 )
-                meal_text = self.meal_agent.run(
-                    fallback_prompt, memory_context, prefs
-                )
+                meal_text = self.meal_agent.run(fallback_prompt, memory_context, prefs)
                 meal_text = validate_meal_plan(meal_text, prefs)
-                logs.append({
-                    "agent": "MealPlannerAgent (fallback-for-shopping)",
-                    "prompt": fallback_prompt,
-                    "output": str(meal_text)[:900],
-                    "duration": "N/A",
-                })
 
-            shopping_items = self.shopping_agent.run(meal_text, prefs)
+            items = self.shopping_agent.run(meal_text, prefs)
+            if isinstance(items, list):
+                items = items[:30]
 
-            if isinstance(shopping_items, list):
-                shopping_items = shopping_items[:30]  # max 30 items
-            results["shopping"] = shopping_items
-
+            results["shopping"] = items
             t1 = time.time()
+
             logs.append({
                 "agent": "ShoppingAgent",
-                "prompt": str(meal_text)[:900],
-                "output": str(shopping_items)[:900],
+                "prompt": meal_text[:900],
+                "output": str(items)[:900],
                 "duration": f"{t1 - t0:.2f}s",
             })
 
-        # -------- TRAVEL ITINERARY --------
+        # ------------------ TRAVEL ITINERARY ------------------
         if want_travel:
             t0 = time.time()
             travel_text = self.travel_agent.run(user_query, memory_context, prefs)
             t1 = time.time()
             results["travel"] = travel_text
+
             logs.append({
                 "agent": "TravelAgent",
                 "prompt": user_query,
-                "output": str(travel_text)[:900],
+                "output": travel_text[:900],
                 "duration": f"{t1 - t0:.2f}s",
             })
 
-        if return_logs:
-            return results, logs
-        return results, []
+        return (results, logs) if return_logs else (results, [])

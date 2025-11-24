@@ -12,8 +12,9 @@ from reportlab.lib.styles import getSampleStyleSheet
 
 # PDF generator
 from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph
-from reportlab.lib.styles import getSampleStyleSheet
+from dotenv import load_dotenv
+load_dotenv()
+
 
 PDF_COPYRIGHT = "© 2025 Saranya. All Rights Reserved. No part of this document may be reproduced or distributed without permission."
 # ---------------------------------------------------------
