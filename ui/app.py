@@ -4,66 +4,49 @@ import io
 import os
 import base64
 import json
+from typing import Any
+
 import streamlit as st
 import pandas as pd
+
 from orchestrator import Orchestrator
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
-from reportlab.lib.styles import getSampleStyleSheet
 
 # PDF generator
 from reportlab.lib.pagesizes import letter
-from dotenv import load_dotenv
-load_dotenv()
+from reportlab.platypus import SimpleDocTemplate, Paragraph
+from reportlab.lib.styles import getSampleStyleSheet
 
 
-PDF_COPYRIGHT = "© 2025 Saranya. All Rights Reserved. No part of this document may be reproduced or distributed without permission."
 # ---------------------------------------------------------
 # PAGE CONFIG
 # ---------------------------------------------------------
 st.set_page_config(
     page_title="LifePilot",
     page_icon="✨",
-    layout="wide"
+    layout="wide",
 )
 
-# ---------------------------------------------------------
-# GLOBAL CSS (make sure fixed elements are visible)
-# ---------------------------------------------------------
-global_css = """
-<style>
-[data-testid="stAppViewContainer"] {
-    overflow: visible !important;
-}
-</style>
-"""
-st.html(global_css)
 
-# Load orchestrator in session
+# ---------------------------------------------------------
+# SESSION-STATE INITIALIZATION
+# ---------------------------------------------------------
 if "orc" not in st.session_state:
-    st.session_state.orc = Orchestrator()
+    st.session_state["orc"] = Orchestrator()
 
-orc = st.session_state.orc
+if "ready" not in st.session_state:
+    st.session_state["ready"] = False
 
-st.write("### ⚙️ System Controls")
+if "theme" not in st.session_state:
+    st.session_state["theme"] = "light"  # "light" or "dark"
 
-col1, col2, col3 = st.columns(3)
+if "show_settings" not in st.session_state:
+    st.session_state["show_settings"] = False
 
-with col1:
-    if st.button("🧹 Clear Memory"):
-        orc.reset_all()
-        st.success("Memory cleared! All stored preferences removed.")
+orc: Orchestrator = st.session_state["orc"]
 
-with col2:
-    if st.button("✨ Clear Preferences Only"):
-        orc.reset_preferences_only()
-        st.success("All preference hints cleared!")
 
-with col3:
-    if st.button("🔥 Reset Everything"):
-        st.session_state.orc = Orchestrator()
-        st.success("System fully reset!")
 # ---------------------------------------------------------
-# LOAD LOGO (PROJECT-SAFE PATH)
+# UTIL: LOAD LOGO
 # ---------------------------------------------------------
 def load_image_base64(path: str) -> str | None:
     try:
@@ -72,189 +55,467 @@ def load_image_base64(path: str) -> str | None:
     except Exception:
         return None
 
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 LOGO_PATH = os.path.join(BASE_DIR, "..", "docs", "lifepilot_logo.png")
-
 logo_b64 = load_image_base64(LOGO_PATH)
 
 
 # ---------------------------------------------------------
-# PREMIUM HEADER
+# THEME COLORS
 # ---------------------------------------------------------
-premium_header = f"""
+def get_theme_colors(theme: str) -> dict[str, str]:
+    if theme == "dark":
+        return {
+            "bg": "#060814",
+            "card": "#111827",
+            "card_soft": "#0b1020",
+            "accent": "#4b6fff",
+            "accent_soft": "#4b6fff22",
+            "text": "#f9fafb",
+            "muted": "#9ca3af",
+            "border": "#1f2937",
+            "danger": "#ef4444",
+        }
+    else:
+        # light
+        return {
+            "bg": "#f5f6fb",
+            "card": "#ffffff",
+            "card_soft": "#eef1ff",
+            "accent": "#4b6fff",
+            "accent_soft": "#4b6fff18",
+            "text": "#111827",
+            "muted": "#6b7280",
+            "border": "#e5e7eb",
+            "danger": "#dc2626",
+        }
+
+
+colors = get_theme_colors(st.session_state["theme"])
+
+
+# ---------------------------------------------------------
+# GLOBAL CSS (layout + theme)
+# ---------------------------------------------------------
+global_css = f"""
 <style>
-#lp_header {{
+
+/* Base background */
+.stApp {{
+    background: {colors["bg"]};
+    color: {colors["text"]};
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+                 "Segoe UI", sans-serif;
+}}
+
+/* Remove default Streamlit padding */
+.block-container {{
+    padding-top: 1.5rem;
+    padding-bottom: 2rem;
+    max-width: 1100px;
+}}
+
+/* Header card */
+.lp-header {{
     width: 100%;
-    padding: 20px 35px;
+    padding: 18px 24px;
+    border-radius: 18px;
     background: linear-gradient(90deg, #4b6fff, #7b9dff);
-    border-radius: 0 0 12px 12px;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.18);
+    box-shadow: 0 18px 45px rgba(15, 23, 42, 0.35);
     display: flex;
     align-items: center;
-    gap: 20px;
-    color: white;
-    margin-bottom: 25px;
+    gap: 18px;
+    color: #ffffff;
+    margin-bottom: 1.5rem;
 }}
-#lp_header img {{
+
+.lp-header-logo {{
+    width: 64px;
+    height: 64px;
+    border-radius: 20px;
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.75);
+    overflow: hidden;
+    flex-shrink: 0;
+}}
+
+.lp-header-logo img {{
+    width: 64px;
+    height: 64px;
+}}
+
+.lp-header-text-main {{
+    font-size: 28px;
+    font-weight: 750;
+    letter-spacing: 0.02em;
+    margin-bottom: 2px;
+}}
+
+.lp-header-text-sub {{
+    font-size: 13px;
+    opacity: 0.95;
+}}
+
+/* Small pill labels, buttons etc */
+.lp-pill {{
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,0.2);
+    background: rgba(15,23,42,0.25);
+    font-size: 11px;
+    backdrop-filter: blur(8px);
+}}
+
+/* Theme toggle alignment */
+.lp-header-right {{
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+    font-size: 12px;
+}}
+
+/* Generic card */
+.lp-card {{
+    background: {colors["card"]};
+    border-radius: 18px;
+    padding: 18px 18px 14px 18px;
+    border: 1px solid {colors["border"]};
+    box-shadow: 0 16px 35px rgba(15, 23, 42, 0.15);
+    margin-bottom: 16px;
+}}
+
+/* Softer card */
+.lp-card-soft {{
+    background: {colors["card_soft"]};
+    border-radius: 14px;
+    padding: 10px 12px;
+    border: 1px dashed {colors["border"]};
+    margin-top: 8px;
+}}
+
+/* Section title */
+.lp-section-title {{
+    font-weight: 600;
+    font-size: 15px;
+    margin-bottom: 4px;
+}}
+
+/* Little caption under sections */
+.lp-section-caption {{
+    font-size: 12px;
+    color: {colors["muted"]};
+    margin-bottom: 6px;
+}}
+
+/* Text area label */
+.lp-input-label {{
+    font-weight: 600;
+    font-size: 14px;
+    margin-bottom: 4px;
+}}
+
+/* Tabs styling – soften background */
+div[data-baseweb="tab"] > button {{
+    border-radius: 999px !important;
+}}
+
+/* Footer */
+.lp-footer {{
+    text-align: center;
+    padding: 28px 0 10px 0;
+    color: {colors["muted"]};
+    font-size: 12px;
+}}
+
+.lp-footer img {{
     width: 70px;
-    border-radius: 12px;
-    box-shadow: 0 3px 12px rgba(0,0,0,0.4);
+    margin-bottom: 6px;
 }}
-#lp_title {{
-    font-size: 32px;
-    font-weight: 800;
-    margin: 0;
+
+/* System control buttons container */
+.lp-system-buttons button[kind="secondary"] {{
+    border-radius: 999px !important;
 }}
-#lp_subtitle {{
-    font-size: 16px;
-    opacity: 0.9;
-    margin-top: 4px;
+
+/* Small dot separator */
+.lp-dot {{
+    margin: 0 6px;
+    opacity: 0.5;
 }}
 </style>
+"""
+st.markdown(global_css, unsafe_allow_html=True)
 
-<div id="lp_header">
+
+# ---------------------------------------------------------
+# SYSTEM CONTROL CALLBACKS
+# ---------------------------------------------------------
+def clear_memory() -> None:
+    """Clear vector memory but keep current UI layout."""
+    try:
+        orc.memory.vectors = []
+        orc.memory.texts = []
+    except Exception:
+        pass
+    st.session_state["ready"] = False
+
+
+def clear_preferences_only() -> None:
+    """Alias for now – clears memory, preserves logs."""
+    clear_memory()
+
+
+def reset_everything() -> None:
+    """Hard reset of the session orchestrator + results."""
+    st.session_state.clear()
+    st.session_state["orc"] = Orchestrator()
+    st.session_state["theme"] = "light"
+    st.session_state["show_settings"] = False
+
+
+# ---------------------------------------------------------
+# HEADER
+# ---------------------------------------------------------
+header_html = f"""
+<div class="lp-header">
+  <div class="lp-header-logo">
     {"<img src='data:image/png;base64," + logo_b64 + "' />" if logo_b64 else ""}
-    <div>
-        <div id="lp_title">✨ LifePilot</div>
-        <div id="lp_subtitle">Your Intelligent Planner · by Saranya Ganesan</div>
+  </div>
+  <div style="flex:1; display:flex; flex-direction:column;">
+    <div class="lp-header-text-main">✨ LifePilot</div>
+    <div class="lp-header-text-sub">
+      Your Intelligent Planner · Meals · Shopping · Travel
     </div>
+    <div style="margin-top:8px;">
+      <span class="lp-pill">Multi-Agent · Gemini · Vector Memory</span>
+    </div>
+  </div>
 </div>
 """
-st.html(premium_header)
-page_watermark = """
-<style>
-body::after {
-    content: "LifePilot  © 2025 Saranya";
-    position: fixed;
-    bottom: 10px;
-    left: 10px;
-    font-size: 10px;
-    color: rgba(0,0,0,0.35);
-    pointer-events: none;
-}
-</style>
-"""
-st.html(page_watermark)
+
+# Lay out header + right-side controls using columns
+header_col_left, header_col_right = st.columns([4, 2])
+with header_col_left:
+    st.markdown(header_html, unsafe_allow_html=True)
+
+with header_col_right:
+    with st.container():
+        st.markdown(
+            "<div class='lp-header-right'>Theme & Settings</div>",
+            unsafe_allow_html=True,
+        )
+        col_theme, col_settings = st.columns(2)
+        with col_theme:
+            dark_mode = st.toggle(
+                "Dark Mode",
+                value=(st.session_state["theme"] == "dark"),
+                key="theme_toggle",
+            )
+            st.session_state["theme"] = "dark" if dark_mode else "light"
+        with col_settings:
+            if st.button("⚙️ Settings", use_container_width=True):
+                st.session_state["show_settings"] = not st.session_state.get(
+                    "show_settings", False
+                )
 
 
 # ---------------------------------------------------------
-# INITIALIZE ORCHESTRATOR
+# SETTINGS / CONFIG SIDEBAR "MODAL"
+# (does not change backend behavior, only UI)
 # ---------------------------------------------------------
-if "orc" not in st.session_state:
-    st.session_state["orc"] = Orchestrator()
-
-orc: Orchestrator = st.session_state["orc"]
+if st.session_state.get("show_settings", False):
+    with st.sidebar:
+        st.markdown("### ⚙️ LifePilot Configuration")
+        st.caption(
+            "These controls are for experimentation / UI only. "
+            "Core behavior is still driven by environment variables & backend code."
+        )
+        st.text_input("Display Name", value="Saranya", help="For future personalization.")
+        st.slider(
+            "LLM Creativity (temperature – cosmetic only)",
+            0.0,
+            1.0,
+            0.4,
+            0.1,
+            help="UI-only slider. Actual temperature is controlled in backend.",
+        )
+        st.text_input(
+            "Primary Model (display only)",
+            value="gemini-2.5-flash",
+        )
+        st.text_input(
+            "Deployment URL (read-only)",
+            value="https://lifepilot-service-254077494572.us-central1.run.app",
+            disabled=True
+        )
+        st.button("Close Settings", on_click=lambda: st.session_state.update({"show_settings": False}))
 
 
 # ---------------------------------------------------------
-# PDF BUILDERS
+# SYSTEM CONTROLS CARD
+# ---------------------------------------------------------
+with st.container():
+    st.markdown(
+        f"""
+        <div class="lp-card">
+          <div class="lp-section-title">🧩 System Controls</div>
+          <div class="lp-section-caption">
+            Manage memory & debugging. These actions affect how LifePilot remembers your preferences.
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    sys_cols = st.columns([1.1, 1.2, 1])
+    with sys_cols[0]:
+        st.button("🧹 Clear Memory", on_click=clear_memory, use_container_width=True)
+    with sys_cols[1]:
+        st.button(
+            "✨ Clear Preferences Only",
+            on_click=clear_preferences_only,
+            use_container_width=True,
+        )
+    with sys_cols[2]:
+        st.button("🔥 Reset Everything", on_click=reset_everything, use_container_width=True)
+
+    # Memory debug expander
+    with st.expander("🔍 View Current Preferences (Memory Debug)", expanded=False):
+        try:
+            prefs = orc.build_preferences()
+            st.json(prefs)
+        except Exception as e:
+            st.error(f"Failed to load preferences: {e}")
+
+
+# ---------------------------------------------------------
+# PDF HELPERS
 # ---------------------------------------------------------
 def build_pdf(text: str) -> bytes:
-    """Create a simple text PDF with a copyright footer."""
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter)
     styles = getSampleStyleSheet()
-
-    story = []
-    # main content
-    story.append(Paragraph(text.replace("\n", "<br/>"), styles["Normal"]))
-    story.append(Spacer(1, 24))
-    # copyright footer
-    story.append(Paragraph(f"<font size=8 color='#888888'>{PDF_COPYRIGHT}</font>", styles["Normal"]))
-
+    story = [Paragraph(text.replace("\n", "<br/>"), styles["Normal"])]
     doc.build(story)
     buffer.seek(0)
     return buffer.read()
 
 
 def build_shopping_pdf(df: pd.DataFrame) -> bytes:
-    """Create a PDF from a shopping list dataframe with a copyright footer."""
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter)
     styles = getSampleStyleSheet()
 
     lines: list[str] = []
     for _, row in df.iterrows():
-        line = f"{row.get('category', '')}: {row.get('item', '')} — {row.get('quantity', '')} {row.get('notes', '')}"
+        line = (
+            f"{row.get('category', '')}: {row.get('item', '')} — "
+            f"{row.get('quantity', '')} {row.get('notes', '')}"
+        )
         lines.append(line)
 
     text = "<br/>".join(lines) if lines else "No items."
-
-    story = []
-    story.append(Paragraph(text, styles["Normal"]))
-    story.append(Spacer(1, 24))
-    story.append(Paragraph(f"<font size=8 color='#888888'>{PDF_COPYRIGHT}</font>", styles["Normal"]))
-
+    story = [Paragraph(text, styles["Normal"])]
     doc.build(story)
     buffer.seek(0)
     return buffer.read()
 
-# ---------------------------------------------------------
-# PREFERENCE DEBUG
-# ---------------------------------------------------------
-with st.expander("🔍 View Current Preferences (Memory Debug)"):
-    try:
-        prefs = orc.build_preferences()
-        st.json(prefs)
-    except Exception as e:
-        st.error(f"Failed to load preferences: {e}")
-
 
 # ---------------------------------------------------------
-# USER INPUT
+# MAIN INPUT CARD
 # ---------------------------------------------------------
-query = st.text_area(
-    "💬 Ask LifePilot:",
-    placeholder="e.g., Plan my week with vegetarian meals, shopping list, and a Dallas trip."
-)
+with st.container():
+    st.markdown(
+        f"""
+        <div class="lp-card">
+          <div class="lp-section-title">💬 Ask LifePilot</div>
+          <div class="lp-section-caption">
+            Describe what you need. LifePilot will automatically decide whether to plan meals, shopping, travel, or all three.
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Slightly below the label card, place the actual text area & run button
+    col_input, col_run = st.columns([4, 1])
+    with col_input:
+        query = st.text_area(
+            label="Ask LifePilot",
+            label_visibility="collapsed",
+            placeholder=(
+                "Examples:\n"
+                "• Plan my next week: vegetarian meals, groceries, and a 2-day trip to Dallas.\n"
+                "• I love South Indian food, lactose-free. Give me a 3-day meal plan.\n"
+                "• Plan a 1-day Austin trip with kid-friendly spots."
+            ),
+            height=120,
+        )
+
+    with col_run:
+        st.write("")  # spacing
+        st.write("")
+        run_clicked = st.button("🚀 Run LifePilot", use_container_width=True)
 
 
 # ---------------------------------------------------------
-# RUN BUTTON
+# RUN ORCHESTRATOR
 # ---------------------------------------------------------
-if st.button("Run LifePilot 🚀"):
-
-    if not query.strip():
-        st.warning("Please enter a request.")
-        st.stop()
-
-    results, logs = orc.handle(query, return_logs=True)
-
-    st.session_state["meal"] = results.get("meal")
-    st.session_state["shopping"] = results.get("shopping")
-    st.session_state["travel"] = results.get("travel")
-    st.session_state["logs"] = logs
-
-    st.session_state["meal_pdf"] = build_pdf(results["meal"]) if results["meal"] else None
-
-    if isinstance(results["shopping"], list):
-        try:
-            df = pd.DataFrame(results["shopping"])
-            st.session_state["shopping_pdf"] = build_shopping_pdf(df)
-        except Exception:
-            st.session_state["shopping_pdf"] = None
+if run_clicked:
+    if not (query or "").strip():
+        st.warning("Please enter a request before running LifePilot.")
     else:
-        st.session_state["shopping_pdf"] = None
+        with st.spinner("Running LifePilot agents…"):
+            results, logs = orc.handle(query, return_logs=True)
 
-    st.session_state["travel_pdf"] = build_pdf(results["travel"]) if results["travel"] else None
+        # Store in session_state for PDF & tab re-renders
+        st.session_state["meal"] = results.get("meal")
+        st.session_state["shopping"] = results.get("shopping")
+        st.session_state["travel"] = results.get("travel")
+        st.session_state["logs"] = logs
 
-    st.session_state["ready"] = True
+        # PDFs
+        if st.session_state.get("meal"):
+            st.session_state["meal_pdf"] = build_pdf(st.session_state["meal"])
+        else:
+            st.session_state["meal_pdf"] = None
+
+        shopping_data: Any = st.session_state.get("shopping")
+        if isinstance(shopping_data, list) and shopping_data:
+            try:
+                df_for_pdf = pd.DataFrame(shopping_data)
+                st.session_state["shopping_pdf"] = build_shopping_pdf(df_for_pdf)
+            except Exception:
+                st.session_state["shopping_pdf"] = None
+        else:
+            st.session_state["shopping_pdf"] = None
+
+        if st.session_state.get("travel"):
+            st.session_state["travel_pdf"] = build_pdf(st.session_state["travel"])
+        else:
+            st.session_state["travel_pdf"] = None
+
+        st.session_state["ready"] = True
 
 
 # ---------------------------------------------------------
-# DISPLAY RESULTS
+# RESULTS TABS
 # ---------------------------------------------------------
 if st.session_state.get("ready"):
 
     tabs = st.tabs(["🍽 Meal Plan", "🛒 Shopping List", "✈ Travel Itinerary", "📜 Logs"])
 
-    # Meal
+    # --------- Meal Tab ---------
     with tabs[0]:
-        st.subheader("🍽 Meal Plan")
+        st.markdown("### 🍽 Meal Plan")
         meal = st.session_state.get("meal")
         if meal:
             st.markdown(f"```text\n{meal}\n```")
-            if st.session_state["meal_pdf"]:
+            if st.session_state.get("meal_pdf"):
                 st.download_button(
                     "⬇️ Download Meal Plan PDF",
                     st.session_state["meal_pdf"],
@@ -264,18 +525,28 @@ if st.session_state.get("ready"):
         else:
             st.info("No meal plan generated for this query.")
 
-    # Shopping
+    # --------- Shopping Tab ---------
     with tabs[1]:
-        st.subheader("🛒 Shopping List")
+        st.markdown("### 🛒 Shopping List")
         shopping = st.session_state.get("shopping")
+
         if shopping:
+            if isinstance(shopping, str):
+                try:
+                    shopping = json.loads(shopping)
+                except Exception:
+                    pass
+
             if isinstance(shopping, list):
                 try:
                     df = pd.DataFrame(shopping)
-                    st.dataframe(df, width="stretch")
+                    st.dataframe(df, use_container_width=True)
                 except Exception:
                     st.write(shopping)
-            if st.session_state["shopping_pdf"]:
+            else:
+                st.write(shopping)
+
+            if st.session_state.get("shopping_pdf"):
                 st.download_button(
                     "⬇️ Download Shopping List PDF",
                     st.session_state["shopping_pdf"],
@@ -283,15 +554,15 @@ if st.session_state.get("ready"):
                     "application/pdf",
                 )
         else:
-            st.info("No shopping list generated.")
+            st.info("No shopping list generated for this query.")
 
-    # Travel
+    # --------- Travel Tab ---------
     with tabs[2]:
-        st.subheader("✈ Travel Itinerary")
+        st.markdown("### ✈ Travel Itinerary")
         travel = st.session_state.get("travel")
         if travel:
             st.markdown(f"```text\n{travel}\n```")
-            if st.session_state["travel_pdf"]:
+            if st.session_state.get("travel_pdf"):
                 st.download_button(
                     "⬇️ Download Travel Itinerary PDF",
                     st.session_state["travel_pdf"],
@@ -301,153 +572,30 @@ if st.session_state.get("ready"):
         else:
             st.info("No travel itinerary generated.")
 
-    # Logs
+    # --------- Logs Tab ---------
     with tabs[3]:
-        st.subheader("📜 Raw JSON Logs")
+        st.markdown("### 📜 Raw JSON Logs")
         st.json(st.session_state.get("logs"))
 
 
 # ---------------------------------------------------------
 # FOOTER
 # ---------------------------------------------------------
-# ---------------------------------------------------------
-# FOOTER (with links + copyright)
-# ---------------------------------------------------------
 footer_html = f"""
-<style>
-#lp_footer_wrap {{
-    text-align:center;
-    padding: 30px 10px 10px 10px;
-    margin-top: 50px;
-    color: #555;
-    font-size: 14px;
-}}
-#lp_footer_logo {{
-    width: 80px;
-    margin-bottom: 10px;
-    border-radius: 12px;
-    box-shadow: 0 3px 10px rgba(0,0,0,0.12);
-}}
-#lp_footer_title {{
-    margin: 0;
-    font-weight: 600;
-    font-size: 20px;
-}}
-#lp_footer_links a {{
-    text-decoration: none;
-    color: #1a0dab;
-    font-weight: 600;
-    margin: 0 6px;
-}}
-#lp_footer_copy {{
-    margin-top: 8px;
-    font-size: 12px;
-    color: #777;
-}}
-</style>
-
-<div id="lp_footer_wrap">
-    {f"<img id='lp_footer_logo' src='data:image/png;base64,{logo_b64}' />" if logo_b64 else ""}
-    <h3 id="lp_footer_title">✨ LifePilot — Intelligent Planner</h3>
-    <p>Designed & Developed with ❤️ by <b>Saranya Ganesan</b></p>
-    <div id="lp_footer_links">
-        <a href="https://www.linkedin.com/in/saranya-ganesan-texas" target="_blank">🔗 LinkedIn</a> |
-        <a href="https://github.com/saranyaganesandeveloper/LifePilot-Capstone-Project" target="_blank">🔗 GitHub</a>
+<div class="lp-footer">
+    {"<img src='data:image/png;base64," + logo_b64 + "' />" if logo_b64 else ""}
+    <div><strong>✨ LifePilot — Intelligent Planner</strong></div>
+    <div style="margin-top:4px;">
+        Designed &amp; Developed with ❤️ by <b>Saranya Ganesan</b>
     </div>
-    <div id="lp_footer_copy">
-        © 2025 Saranya. All Rights Reserved.<br/>
-        No part of this application or its outputs may be reproduced or distributed without permission.
+    <div style="margin-top:4px;">
+        <a href="https://www.linkedin.com/in/saranya-ganesan-texas" target="_blank">LinkedIn</a>
+        <span class="lp-dot">•</span>
+        <a href="https://github.com/saranyaganesandeveloper/LifePilot-Capstone-Project" target="_blank">GitHub</a>
+    </div>
+    <div style="margin-top:6px; font-size:11px; opacity:0.8;">
+        © 2025 Saranya. All Rights Reserved. No part of this application or its output may be reproduced or distributed without permission.
     </div>
 </div>
 """
-
-st.html(footer_html)
-
-
-
-# ---------------------------------------------------------
-# ANIMATED LOGO FLOATING BUBBLE
-# ---------------------------------------------------------
-animated_bubble = f"""
-<style>
-#lp_bubble {{
-    position: fixed;
-    bottom: 25px;
-    right: 25px;
-    width: 65px;
-    height: 65px;
-    border-radius: 50%;
-    background: white;
-    box-shadow: 0px 6px 18px rgba(0,0,0,0.25);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    cursor: pointer;
-    z-index: 999999999;
-    animation: pulseGlow 1.8s infinite ease-in-out;
-    transition: transform 0.2s ease;
-}}
-#lp_bubble:hover {{
-    transform: scale(1.12);
-}}
-#lp_bubble img {{
-    width: 42px;
-    height: 42px;
-    border-radius: 50%;
-}}
-@keyframes pulseGlow {{
-    0%  {{ box-shadow: 0 0 0px rgba(75,111,255,0.6); transform: scale(1.0); }}
-    50% {{ box-shadow: 0 0 18px rgba(75,111,255,0.75); transform: scale(1.08); }}
-    100%{{ box-shadow: 0 0 0px rgba(75,111,255,0.6); transform: scale(1.0); }}
-}}
-
-#lp_popup {{
-    position: fixed;
-    bottom: 100px;
-    right: 25px;
-    width: 260px;
-    background: white;
-    border-radius: 14px;
-    box-shadow: 0px 8px 20px rgba(0,0,0,0.25);
-    padding: 16px;
-    font-size: 14px;
-    z-index: 999999999;
-    display: none;
-}}
-#lp_popup a {{
-    text-decoration: none;
-    color: #1a0dab;
-    font-weight: 600;
-    display: block;
-    margin-top: 6px;
-}}
-</style>
-
-<div id="lp_bubble">
-    {"<img src='data:image/png;base64," + logo_b64 + "' />" if logo_b64 else "✨"}
-</div>
-
-<div id="lp_popup">
-    <strong>✨ Made by Saranya</strong><br>
-    Creator of LifePilot — Multi-Agent AI Planner.<br><br>
-    <a href="https://www.linkedin.com/in/saranya-ganesan-texas" target="_blank">🔗 LinkedIn</a>
-    <a href="https://github.com/saranyaganesandeveloper/LifePilot-Capstone-Project" target="_blank">🔗 GitHub</a>
-</div>
-
-<script>
-const bubble = document.getElementById("lp_bubble");
-const popup = document.getElementById("lp_popup");
-if (bubble && popup) {{
-    bubble.onclick = () => {{
-        popup.style.display = (popup.style.display === "none" || popup.style.display === "") ? "block" : "none";
-    }};
-}}
-</script>
-"""
-
-st.html(animated_bubble)
-with st.expander("Developer Tools"):
-    if st.button("🛑 Clear LLM Cache"):
-        from gen_client import clear_cache
-        clear_cache()
-        st.success("LLM cache cleared!")
+st.markdown(footer_html, unsafe_allow_html=True)

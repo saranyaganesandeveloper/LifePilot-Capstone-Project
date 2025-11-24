@@ -1,193 +1,137 @@
+
 <div align="center">
   <img src="docs/lifepilot_logo.png" width="120" alt="LifePilot Logo" />
 
   # ✨ LifePilot — Your Intelligent Planner  
   **A multi-agent AI system that plans Meals, Shopping Lists, and Travel Itineraries intelligently.**
 
-  Designed & Developed with ❤️ by **Saranya Ganesan**
+  Designed & Developed with ❤️ by **Saranya Ganesan**  
   <br/><br/>
 
-  [![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)]()
-  [![Streamlit](https://img.shields.io/badge/Streamlit-App-red.svg)]()
-  [![Google Gemini](https://img.shields.io/badge/Google%20Gemini-API-00A9FF.svg)]()
-  [![License](https://img.shields.io/badge/License-All%20Rights%20Reserved-orange.svg)]()
+  ![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
+  ![Streamlit](https://img.shields.io/badge/Streamlit-App-red.svg)
+  ![Google Gemini](https://img.shields.io/badge/Google%20Gemini-API-00A9FF.svg)
+  ![License](https://img.shields.io/badge/License-All%20Rights%20Reserved-orange.svg)
 </div>
 
 ---
 
-# 🌟 Overview
+## 🚀 Overview  
+**LifePilot** is a smart, multi-agent AI platform that automates:
+- 🥗 Meal Planning  
+- 🛒 Grocery/Shopping List Generation  
+- ✈ Travel Itinerary Planning  
 
-**LifePilot** is a smart personal assistant powered by **multi-agent architecture**, using:
-
-- Meal Planner Agent  
-- Shopping List Agent  
-- Travel Planner Agent  
-- Preference Extraction Agent  
-- Vector Memory for personalization  
-- Streamlit UI  
-- PDF generation
-
-It helps users generate:
-
-🍽 **Personalized multi-day meal plans**  
-🛒 **Smart shopping lists (max 30 items)**  
-✈ **Travel itineraries**  
-📄 **Downloadable PDFs**
-
-Everything adapts based on user preferences stored in memory.
+Powered by **Google Gemini**, **vector memory**, and **LLM-based intent detection**, LifePilot learns user preferences over time to deliver personalized plans.
 
 ---
 
-# 📌 Features
+## 🌐 Live Deployment  
+Your service is deployed on **Google Cloud Run**:
 
-### ✔ Multi-Agent Intelligent Workflow
-- Each agent handles a dedicated task.
-- The Orchestrator automatically selects agents based on intent.
-
-### ✔ Preference Memory
-- Stores user habits, diet choices, dislikes, allergies.
-- Uses Google Gemini embeddings + Vector Memory.
-
-### ✔ Clean & Modern UI (Streamlit)
-- Premium header with branding  
-- Professional footer  
-- PDF exports  
-- Debug memory viewer  
-
-### ✔ PDF Generation
-- ReportLab used for text-based PDFs  
-- Built-in copyright footer
-
-### ✔ Fully Local UI (Install & Run)
+🔗 **Production URL:**  
+https://lifepilot-service-254077494572.us-central1.run.app  
 
 ---
 
-# 📁 Project Structure
-
+## 📦 Project Structure
+```
 LifePilot-Capstone-Project/
+│── agents/
+│   ├── meal_agent.py
+│   ├── shopping_agent.py
+│   └── travel_agent.py
 │
-├── ui/
-│ └── app.py # Streamlit application
+│── memory/
+│   ├── vector_memory.py
+│   └── preference_extractor.py
 │
-├── agents/
-│ ├── meal_agent.py
-│ ├── shopping_agent.py
-│ └── travel_agent.py
+│── ui/
+│   └── app.py
 │
-├── orchestrator.py # Multi-agent controller
+│── utils/
+│   └── validators.py
 │
-├── memory/
-│ ├── vector_memory.py
-│ └── preference_extractor.py
-│
-├── utils/
-│ └── validators.py
-│
-├── docs/
-│ └── lifepilot_logo.png # App logo
-│
-├── gen_client.py # Google Gemini API Wrapper
-├── requirements.txt
-└── LICENSE
-
+│── gen_client.py
+│── orchestrator.py
+│── Dockerfile
+│── requirements.txt
+│── README.md
+│── .env.example
+│── docs/
+│     └── lifepilot_logo.png
+```
 
 ---
 
-# 🚀 Installation & Setup
+## 🔧 Local Setup
 
-### 1️⃣ Clone the repository
-
+### 1️⃣ Create a Virtual Environment
 ```bash
-git clone https://github.com/saranyaganesandeveloper/LifePilot-Capstone-Project.git
-cd LifePilot-Capstone-Project
+python -m venv venv
+source venv/bin/activate        # macOS/Linux
+venv\Scripts\activate         # Windows
+```
 
-2️⃣ Install dependencies
+### 2️⃣ Install Dependencies
+```bash
 pip install -r requirements.txt
+```
 
-3️⃣ Set your Google Gemini API Key
-export GEN_API_KEY="your-key-here"
+### 3️⃣ Add API Keys  
+Create a **.env** file:
+```
+PRIMARY_GEN_API_KEY="your_key"
+BACKUP_GEN_API_KEY=""
+THIRD_GEN_API_KEY=""
+```
 
-
-Windows PowerShell:
-
-$env:GEN_API_KEY="your-key-here"
-
-4️⃣ Run the app
+### 4️⃣ Run App Locally
+```bash
 streamlit run ui/app.py
+```
 
+---
 
-Your app opens at:
+## 🐳 Docker Deployment
 
-http://localhost:8501
+### Build Image
+```bash
+docker build -t lifepilot .
+```
 
-🔧 Configuration
+### Run Container
+```bash
+docker run -p 8080:8080 -e PRIMARY_GEN_API_KEY="your_key" lifepilot
+```
 
-LifePilot uses the Google Generative AI SDK (google-genai==1.52.0) with:
+---
 
-models/gemini-2.5-flash for generation
+## ☁ Deploy to Google Cloud Run
 
-models/text-embedding-004 for vector memory
+### Enable APIs
+```bash
+gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com secretmanager.googleapis.com
+```
 
-You can update these values in:
+### Build & Push Image
+```bash
+gcloud builds submit --tag gcr.io/PROJECT_ID/lifepilot .
+```
 
-gen_client.py
+### Deploy
+```bash
+gcloud run deploy lifepilot    --image gcr.io/PROJECT_ID/lifepilot    --platform managed    --region us-central1    --set-env-vars PRIMARY_GEN_API_KEY=projects/PROJECT_ID/secrets/GEN_API_KEY/versions/latest    --allow-unauthenticated
+```
 
-🧠 How It Works (Architecture)
-flowchart TD
-    A[User Query] --> B[Orchestrator]
-    B --> C{Intent Detection}
+---
 
-    C -->|Meals| D[Meal Planner Agent]
-    C -->|Shopping| E[Shopping Agent]
-    C -->|Travel| F[Travel Planner Agent]
+## 🧪 Testing the Application  
+Examples included in **TEST_CASES.md**.
 
-    B --> G[Vector Memory Search]
-    G --> D
-    G --> E
-    G --> F
+---
 
-    D --> H[Meal Plan Output]
-    E --> I[Shopping List Output]
-    F --> J[Travel Plan Output]
+## 📜 License  
+© 2025 Saranya. All Rights Reserved.  
+No redistribution or commercial reuse without permission.
 
-    H --> K[PDF Export]
-    I --> K
-    J --> K
-
-📸 Screenshots
-
-Example:
-
-![LifePilot Screenshot](docs/screenshot.png)
-
-
-
-📄 PDF Copyright Footer
-
-All PDFs generated include:
-
-© 2025 Saranya. All Rights Reserved.
-No part of this document may be reproduced or distributed without permission.
-
-🔒 License
-
-This project is proprietary and All Rights Reserved.
-
-See the full license in:
-
-👉 LICENSE
-
-👩‍💻 Author
-
-Saranya Ganesan
-Creator of LifePilot — Multi-Agent Intelligent Planner
-
-🔗 LinkedIn:
-https://www.linkedin.com/in/saranya-ganesan-texas
-
-🔗 GitHub:
-https://github.com/saranyaganesandeveloper
-
-⭐ Support
-
-If you like this project, please ⭐ star the repo on GitHub!
