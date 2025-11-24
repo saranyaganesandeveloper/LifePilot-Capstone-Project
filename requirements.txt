@@ -24,3 +24,4 @@ protobuf>=5.27.0
 
 # --- Pydantic required by google-genai ---
 pydantic>=2.9,<3.0
+python-dotenv

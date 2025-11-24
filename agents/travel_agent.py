@@ -2,6 +2,7 @@
 
 import re
 from typing import Any, Dict, List
+
 from gen_client import generate
 
 
@@ -9,6 +10,7 @@ class TravelAgent:
     """
     Builds a multi-day travel itinerary in plain text.
     """
+
     NUMBER_WORDS = {
         "one": 1,
         "two": 2,
@@ -24,68 +26,47 @@ class TravelAgent:
 
     def infer_days(self, query: str) -> int:
         """
-        Extracts the number of travel days reliably using:
-        • numeric patterns: "2 days", "3-day", "for 4 days"
-        • word patterns: "two days", "three-day trip"
-        • fallback: weekend = 2 days
-        • fallback default = 1 day (short trip)
+        Robustly infer number of days from natural language.
         """
-
         if not query:
             return 1
 
         q = query.lower().strip()
 
-        # ----------------------------------------------
-        # 1. Look for explicit numeric patterns
-        # ----------------------------------------------
-        numeric_match = re.search(r"(\d+)\s*[- ]?\s*day", q)
-        if numeric_match:
+        # 1. Numeric patterns: "2 days", "3-day trip"
+        m = re.search(r"(\d+)\s*[- ]?\s*day", q)
+        if m:
             try:
-                days = int(numeric_match.group(1))
-                if days >= 1:
-                    return days
-            except:
+                n = int(m.group(1))
+                if n >= 1:
+                    return min(n, 10)
+            except Exception:
                 pass
 
-        # ----------------------------------------------
-        # 2. Look for spelled-out numbers ("two-day trip")
-        # ----------------------------------------------
+        # 2. Spelled-out numbers
         for word, num in self.NUMBER_WORDS.items():
             if re.search(rf"{word}\s*[- ]?\s*day", q):
                 return num
-
             if re.search(rf"{word}\s+days", q):
                 return num
 
-        # ----------------------------------------------
-        # 3. Weekend logic → always 2 days
-        # ----------------------------------------------
+        # 3. Weekend
         if "weekend" in q:
             return 2
 
-        # ----------------------------------------------
-        # 4. Overnight trip = 1 day
-        # ----------------------------------------------
+        # 4. Overnight / short trip
         if "overnight" in q:
             return 1
 
-        # ----------------------------------------------
-        # 5. Words implying a short single-day trip
-        # ----------------------------------------------
         one_day_triggers = ["quick trip", "short trip", "day trip", "tomorrow"]
         if any(w in q for w in one_day_triggers):
             return 1
 
-        # ----------------------------------------------
-        # 6. Default fallback: 2 days for general trips
-        # ----------------------------------------------
-        if "trip" in q or "travel" in q or "visit" in q:
+        # 5. Generic trip mention → default 2
+        if any(w in q for w in ["trip", "travel", "visit", "vacation"]):
             return 2
 
-        # ----------------------------------------------
-        # 7. Absolute fallback
-        # ----------------------------------------------
+        # 6. Fallback
         return 1
 
     def run(
@@ -112,18 +93,12 @@ User Query:
 User historical context:
 {context_snippets}
 
-User food preferences (if relevant to restaurant ideas):
+User food preferences (for suggesting vegetarian-friendly places only):
 - Cuisines: {cuisines}
 - Diet type: {diet}
 - Allergies: {allergies}
 
-User travel style: {travel_style}
-
-If travel_style suggests:
-- "family", "kids", "child" → prefer kid-friendly, low-stress activities.
-- "relaxed", "slow", "chilled" → avoid overpacking the plan; leave breaks.
-- "adventurous" → include hikes, views, or unique local experiences.
-- "romantic" → include scenic spots, cozy cafes, and nice evening walks.
+User travel style (if any): {travel_style}
 
 Plan EXACTLY {num_days} days.
 
@@ -135,7 +110,7 @@ For each day, include:
 Rules:
 - Plain text only.
 - No HTML, no JSON, no bullet lists.
-- Exactly this structure:
+- Follow exactly this structure:
 
 Day 1
 🌅 Morning: ...
@@ -145,7 +120,9 @@ Day 1
 Day 2
 ...
 
-Keep it realistic and time-conscious.
+Keep it realistic and family-friendly.
+Mention vegetarian / vegan-friendly restaurants only when relevant,
+but do not output a separate meal plan.
 """
 
         return generate(prompt).strip()

@@ -38,7 +38,30 @@ global_css = """
 """
 st.html(global_css)
 
+# Load orchestrator in session
+if "orc" not in st.session_state:
+    st.session_state.orc = Orchestrator()
 
+orc = st.session_state.orc
+
+st.write("### ⚙️ System Controls")
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    if st.button("🧹 Clear Memory"):
+        orc.reset_all()
+        st.success("Memory cleared! All stored preferences removed.")
+
+with col2:
+    if st.button("✨ Clear Preferences Only"):
+        orc.reset_preferences_only()
+        st.success("All preference hints cleared!")
+
+with col3:
+    if st.button("🔥 Reset Everything"):
+        st.session_state.orc = Orchestrator()
+        st.success("System fully reset!")
 # ---------------------------------------------------------
 # LOAD LOGO (PROJECT-SAFE PATH)
 # ---------------------------------------------------------
@@ -423,3 +446,8 @@ if (bubble && popup) {{
 """
 
 st.html(animated_bubble)
+with st.expander("Developer Tools"):
+    if st.button("🛑 Clear LLM Cache"):
+        from gen_client import clear_cache
+        clear_cache()
+        st.success("LLM cache cleared!")

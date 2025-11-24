@@ -3,58 +3,74 @@
 import json
 import ast
 from typing import Any, Dict, List, Union
+
 from gen_client import generate
 
 
 class ShoppingAgent:
+    """
+    Takes a meal plan text and produces a structured shopping list
+    as a list of dicts: [{category, item, quantity, notes}, ...]
+    """
 
     def _extract_json_array(self, raw: str) -> str:
         raw = raw.strip()
-        s = raw.find("[")
-        e = raw.rfind("]")
-        if s != -1 and e != -1 and e > s:
-            return raw[s:e+1]
+        start = raw.find("[")
+        end = raw.rfind("]")
+        if start != -1 and end != -1 and end > start:
+            return raw[start : end + 1]
         return raw
 
-    def run(self, meal_plan_text: str, prefs: Dict[str, Any]) -> Union[List[Dict[str, Any]], str]:
+    def run(
+        self,
+        meal_plan_text: str,
+        prefs: Dict[str, Any]
+    ) -> Union[List[Dict[str, Any]], str]:
 
         prompt = f"""
 You are a grocery list generator.
 
-Given this meal plan, create a JSON shopping list with AT MOST 30 items.
+Given the following meal plan, create a MINIMAL shopping list
+(covering required ingredients) with AT MOST 30 items.
 
 Meal plan:
 \"\"\"{meal_plan_text}\"\"\"
 
-
-User preferences:
+User preferences (may affect ingredients):
 {json.dumps(prefs, indent=2)}
 
 Rules:
-- STRICT JSON array.
-- Keys: category, item, quantity, notes.
-- No markdown. No bullet lists.
+- Group items into categories (e.g., "Vegetables", "Fruits",
+  "Grains & Pulses", "Dairy Alternatives", "Spices", "Staples").
+- If the user is lactose intolerant, prefer dairy-free alternatives.
+- Return STRICT JSON ONLY.
+- DO NOT wrap in backticks.
+- Structure: a JSON array of objects, each with keys:
+  - "category": string
+  - "item": string
+  - "quantity": string
+  - "notes": string
 """
 
         raw = generate(prompt).strip()
-
         candidate = self._extract_json_array(raw)
 
-        # JSON attempt
-        for text in (candidate, candidate.replace("'", '"')):
+        # Try JSON directly
+        for attempt in (candidate, candidate.replace("'", '"')):
             try:
-                data = json.loads(text)
+                data = json.loads(attempt)
                 if isinstance(data, list):
                     return data
-            except:
+            except Exception:
                 pass
 
-        # Python literal fallback
+        # Try Python literal
         try:
             data = ast.literal_eval(candidate)
             if isinstance(data, list):
                 return data
-        except:
+        except Exception:
             pass
 
+        # Fallback: return raw text so UI still shows something
         return raw

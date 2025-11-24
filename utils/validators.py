@@ -1,167 +1,68 @@
 # utils/validators.py
 
-"""
-validators.py
---------------
-This module enforces dietary rules, allergies, and content cleanup
-AFTER the LLM generates meal plans or shopping lists.
-
-It ensures:
-- No meat/fish/egg items when user is vegetarian.
-- No dairy/egg/honey when user is vegan.
-- No ingredients matching allergy list.
-- Automatic correction or annotation of invalid items.
-- Safe handling of None values.
-"""
-
 import re
+from typing import Dict, Any
+
+from gen_client import generate
 
 
-# -------------------------------------------------------------
-# Normalizers
-# -------------------------------------------------------------
-def _norm(text):
-    """Safety-normalize any text."""
+NON_VEG_WORDS = [
+    "chicken", "turkey", "egg", "fish", "mutton",
+    "beef", "pork", "ham", "bacon", "sausage",
+    "shrimp", "tuna", "salmon", "lamb"
+]
+
+
+def _contains_nonveg(text: str) -> bool:
     if not text:
-        return ""
-    return str(text).lower().strip()
+        return False
+    pattern = r"\b(" + "|".join(NON_VEG_WORDS) + r")\b"
+    return bool(re.search(pattern, text, flags=re.IGNORECASE))
 
 
-def _contains(word_list, text):
-    """Return True if any banned word appears as a word or substring."""
-    t = _norm(text)
-    return any(w in t for w in word_list)
+def _safe_lower(val) -> str:
+    return val.lower() if isinstance(val, str) else ""
 
 
-# -------------------------------------------------------------
-# Lists of banned items
-# -------------------------------------------------------------
-MEAT_WORDS = [
-    "chicken", "fish", "salmon", "tuna", "prawn", "shrimp", "beef",
-    "mutton", "pork", "lamb", "turkey", "egg", "eggs", "steak", "ham"
-]
-
-DAIRY_WORDS = [
-    "milk", "cheese", "butter", "yogurt", "cream", "paneer",
-    "ghee", "curd", "kefir"
-]
-
-SEAFOOD_WORDS = [
-    "crab", "lobster", "clam", "oyster", "squid"
-]
-
-ALL_NON_VEG = MEAT_WORDS + SEAFOOD_WORDS
-
-
-# -------------------------------------------------------------
-# Replacement utility
-# -------------------------------------------------------------
-def _mark(text, word, reason):
-    """Annotate a forbidden word with a removal remark."""
-    pattern = re.compile(re.escape(word), re.IGNORECASE)
-    return pattern.sub(f"{word} (REMOVE: {reason})", text)
-
-
-# -------------------------------------------------------------
-# Core Conditioner
-# -------------------------------------------------------------
-def validate_meal_plan(text: str, prefs: dict) -> str:
+def regenerate_strict_meals(prefs: Dict[str, Any]) -> str:
     """
-    Cleans up LLM output according to preferences.
-    Does NOT try to rewrite entire meals—only removes or annotates violations.
-
-    Arguments:
-        text: LLM output
-        prefs: LLM-extracted user preferences
+    Ask the LLM to regenerate a strictly vegetarian plan,
+    using the same preferences.
     """
-    if not text:
-        return ""
+    prompt = f"""
+Create a 5-day meal plan STRICTLY following these preferences:
+{prefs}
 
-    out = text
+ABSOLUTELY FORBIDDEN:
+- Chicken, turkey, fish, eggs, meat, or seafood of any kind.
 
-    # ---------- Normalize preference fields ----------
-    diet = _norm(prefs.get("diet_type"))
-    allergies = prefs.get("allergies", []) or []
-    allergies = [_norm(a) for a in allergies if a]
+Only vegetarian meals allowed.
 
-    # -------------------------------------------------
-    # 1. ENFORCE VEGETARIAN
-    # -------------------------------------------------
-    if diet in ("veg", "vegetarian"):
-        for w in ALL_NON_VEG:
-            if w in out.lower():
-                out = _mark(out, w, "user is vegetarian")
-
-    # -------------------------------------------------
-    # 2. ENFORCE VEGAN
-    # -------------------------------------------------
-    if diet == "vegan":
-        # remove meat, fish, dairy, honey
-        banned = ALL_NON_VEG + DAIRY_WORDS + ["honey"]
-        for w in banned:
-            if w in out.lower():
-                out = _mark(out, w, "user is vegan")
-
-    # -------------------------------------------------
-    # 3. ALLERGY ENFORCEMENT
-    # -------------------------------------------------
-    for allergen in allergies:
-        if allergen and allergen in out.lower():
-            out = _mark(out, allergen, "allergy")
-
-    # -------------------------------------------------
-    # 4. Minor cleanup (avoid duplicate REMOVE tags)
-    # -------------------------------------------------
-    out = re.sub(r"\(REMOVE: [^)]+\)\s*\(REMOVE: [^)]+\)", "(REMOVE)", out)
-    out = re.sub(r"\s{2,}", " ", out)
-
-    return out
+Output ONLY the meal plan as plain text.
+No JSON, no bullet symbols, no code fences.
+"""
+    return generate(prompt).strip()
 
 
-# --------------------------------------------------------------------
-# Optional: strict validator for shopping list dictionaries (future)
-# --------------------------------------------------------------------
-def sanitize_shopping_list(items, prefs):
+def validate_meal_plan(text: str, prefs: Dict[str, Any]) -> str:
     """
-    Enforces dietary rules inside structured shopping lists.
-    items = list of dicts: {category, item, quantity, notes}
-
-    This ensures:
-    - Non-veg ingredients are flagged or removed.
-    - Allergies flagged.
+    Enforce vegetarian / vegan constraints based on prefs.
+    If diet_type indicates veg/vegan and the text contains
+    non-veg keywords, regenerate once with a strict prompt.
     """
-    cleaned = []
-    diet = _norm(prefs.get("diet_type"))
-    allergies = [_norm(a) for a in prefs.get("allergies", []) or []]
 
-    for row in items:
-        item = _norm(row.get("item", ""))
-        notes = row.get("notes", "")
+    diet = _safe_lower(prefs.get("diet_type", ""))
 
-        flagged = False
-        reason_list = []
+    is_strict_veg = any(
+        key in diet for key in ["veg", "vegan"]
+    )
 
-        # Vegetarian enforcement
-        if diet in ("veg", "vegetarian") and _contains(ALL_NON_VEG, item):
-            flagged = True
-            reason_list.append("non-veg ingredient (vegetarian user)")
+    if not is_strict_veg:
+        # Nothing special to enforce
+        return text or ""
 
-        # Vegan enforcement
-        if diet == "vegan":
-            if _contains(ALL_NON_VEG + DAIRY_WORDS + ["honey"], item):
-                flagged = True
-                reason_list.append("non-vegan ingredient (vegan user)")
+    if _contains_nonveg(text or ""):
+        # Regenerate a strictly veg plan
+        return regenerate_strict_meals(prefs)
 
-        # Allergy enforcement
-        for a in allergies:
-            if a in item:
-                flagged = True
-                reason_list.append(f"contains allergen: {a}")
-
-        # If flagged → modify the item
-        if flagged:
-            row["notes"] = (notes + " | REMOVE: " + ", ".join(reason_list)).strip()
-
-        cleaned.append(row)
-
-    return cleaned
+    return text or ""

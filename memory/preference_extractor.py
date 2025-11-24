@@ -3,141 +3,73 @@
 import json
 import re
 from typing import Dict, Any
+
 from gen_client import generate
 
-PREF_SCHEMA = {
-    "cuisines": list,
-    "diet_type": str,
-    "dislikes": list,
-    "allergies": list,
-    "spice_level": str,
-    "travel_style": str,
-    "likes": list,
-}
 
-DEFAULT_PREFS: Dict[str, Any] = {
+DEFAULT_PREFS = {
     "cuisines": [],
     "diet_type": "",
     "dislikes": [],
     "allergies": [],
     "spice_level": "",
     "travel_style": "",
-    "likes": [],
+    "likes": []
 }
-
-
-def _extract_json_structure(raw: str) -> Dict[str, Any] | None:
-    """
-    Extract the FIRST valid {...} JSON block from raw text.
-    Cleans up common LLM mistakes:
-      - extra text before/after JSON
-      - True/False/None vs true/false/null
-      - trailing commas
-    """
-    try:
-        match = re.search(r"\{[\s\S]*\}", raw)
-        if not match:
-            return None
-
-        text = match.group(0).strip()
-
-        # Normalize JS/Python differences
-        text = text.replace("True", "true")
-        text = text.replace("False", "false")
-        text = text.replace("None", "null")
-
-        # Remove trailing commas before } or ]
-        text = re.sub(r",\s*([}\]])", r"\1", text)
-
-        return json.loads(text)
-    except Exception:
-        return None
-
-
-def _canonical_diet_type(raw_value: str) -> str:
-    """
-    Map various LLM outputs into a small canonical set.
-    Currently:
-      - "veg", "vegetarian", "plant-based" -> "veg"
-      - "vegan" -> "vegan"
-      - others -> ""
-    """
-    if not raw_value:
-        return ""
-
-    v = raw_value.strip().lower()
-    if any(x in v for x in ["veg", "vegetarian", "plant based", "plant-based"]):
-        return "veg"
-    if "vegan" in v:
-        return "vegan"
-
-    # For now we only use vegetarian/vegan vs empty
-    return ""
-
-
-def _validate_preferences(parsed: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Guarantee the final dict matches DEFAULT_PREFS schema exactly.
-    Missing or invalid fields get replaced with defaults.
-    Wrong types get sanitized.
-    """
-    final = DEFAULT_PREFS.copy()
-
-    for key, expected_type in PREF_SCHEMA.items():
-        val = parsed.get(key, None)
-
-        # If missing → default
-        if val is None:
-            final[key] = DEFAULT_PREFS[key]
-            continue
-
-        if expected_type == list:
-            if isinstance(val, list):
-                final[key] = [str(v).strip() for v in val]
-            else:
-                final[key] = [str(val).strip()]
-        else:
-            final[key] = str(val).strip()
-
-    # Canonicalize diet_type specifically
-    final["diet_type"] = _canonical_diet_type(final.get("diet_type", ""))
-
-    return final
 
 
 def extract_preferences(text: str) -> Dict[str, Any]:
     """
-    MAIN ENTRY:
-    Robust & reliable preference extraction using LLM + validation.
+    Extracts structured user preferences from a free-text message
+    using the LLM, but with strong JSON validation + safe fallback.
     """
 
-    prompt = f"""
-Extract strict structured preference JSON from the following user text:
-
-\"\"\"{text}\"\"\"
-
-Return ONLY the following JSON schema and nothing else:
-
-{{
-  "cuisines": [],
-  "diet_type": "",
-  "dislikes": [],
-  "allergies": [],
-  "spice_level": "",
-  "travel_style": "",
-  "likes": []
-}}
-
-Rules:
-- JSON ONLY.
-- No comments, no explanations, no markdown.
-- If unsure, keep fields empty ("" or []).
-"""
-
-    raw = generate(prompt)
-
-    parsed = _extract_json_structure(raw)
-    if not parsed:
+    if not text:
         return DEFAULT_PREFS.copy()
 
-    return _validate_preferences(parsed)
+    prompt = f"""
+You are a system that extracts structured user preferences.
+
+From this text:
+\"\"\"{text}\"\"\"
+
+
+Extract food + travel preferences and return STRICT JSON ONLY:
+
+{{
+  "cuisines": [string],
+  "diet_type": "veg" | "non-veg" | "vegan" | "" | "lacto-veg" | "ovo-veg",
+  "dislikes": [string],
+  "allergies": [string],
+  "spice_level": "mild" | "medium" | "hot" | "",
+  "travel_style": "relaxed" | "adventurous" | "family" | "" | "budget",
+  "likes": [string]
+}}
+"""
+
+    raw = generate(prompt).strip()
+
+    # Try direct JSON
+    try:
+        data = json.loads(raw)
+    except Exception:
+        # Try to extract JSON object substring
+        try:
+            match = re.search(r"\{.*\}", raw, flags=re.DOTALL)
+            if match:
+                data = json.loads(match.group(0))
+            else:
+                return DEFAULT_PREFS.copy()
+        except Exception:
+            return DEFAULT_PREFS.copy()
+
+    out = DEFAULT_PREFS.copy()
+    out["cuisines"] = list(data.get("cuisines", []))
+    out["diet_type"] = str(data.get("diet_type", "")).strip()
+    out["dislikes"] = list(data.get("dislikes", []))
+    out["allergies"] = list(data.get("allergies", []))
+    out["spice_level"] = str(data.get("spice_level", "")).strip()
+    out["travel_style"] = str(data.get("travel_style", "")).strip()
+    out["likes"] = list(data.get("likes", []))
+
+    return out
