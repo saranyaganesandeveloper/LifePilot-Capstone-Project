@@ -64,7 +64,8 @@ LifePilot-Capstone-Project/
 
 ---
 ### 📁 **Architecture Diagram**
-![Architecture Diagram](docs/architecture.png)
+
+![Architecture Diagram](docs/architecture%20diagram.png)
 
 ---
 ## 🔧 Local Setup
