@@ -29,11 +29,13 @@ client = Client(api_key=API_KEY)
 # ==========================================================
 # MODEL CONFIG
 # ==========================================================
-PRIMARY_MODEL = "models/gemini-2.5-flash"
+# Use Google's rolling alias so the app follows the latest Flash release
+# without needing code changes every time the underlying version updates.
+PRIMARY_MODEL = os.getenv("GEMINI_MODEL", "models/gemini-flash-latest")
 FALLBACK_MODELS = [
-    "models/gemini-1.5-flash",
-    "models/gemini-1.5-flash-8b",
-    "models/gemini-1.5-flash-lite",
+    "models/gemini-2.5-flash",
+    "models/gemini-2.5-flash-lite",
+    "models/gemini-2.0-flash",
 ]
 
 EMBED_MODEL = "models/text-embedding-004"
